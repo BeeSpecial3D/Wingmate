@@ -60,7 +60,8 @@ New versions download quietly in the background and install the next time you st
 
 1. Go to [Releases](https://github.com/BeeSpecial3D/Wingmate/releases/latest) and download **`BeeSpecial3D.Wingmate-win-Setup.exe`**.
 2. Run it. Wingmate installs for your user only (no admin needed) and adds Desktop and Start menu shortcuts.
-3. Wingmate isn't code-signed yet, so Windows SmartScreen may say *"Windows protected your PC"*. Click **More info**, then **Run anyway**.
+
+> **"Windows protected your PC"?** Wingmate isn't code-signed yet, so Windows SmartScreen may warn you the first time you run the installer. Click **More info**, then **Run anyway**. You only need to do this once. Wingmate's source code is public, so you can read every line of it in this repo. It doesn't read game memory, inject anything, or automate input.
 
 To uninstall, use Windows **Settings → Apps → Installed apps → Wingmate**.
 
