@@ -250,7 +250,7 @@ namespace Wingmate
                 }
             }
             var tg = BuildWarnColorRows();
-            Small("Test alert", () => App.Current.TestAlert(), tg);
+            Grid.SetColumn(Small("Test alert", () => App.Current.TestAlert(), tg), 1); // takes the room left of swatch/hex/Pick…/Default
 
             Group("WINDOWS");
             // one opacity for the launcher, alerts and checklist; each theme remembers its own (switching themes applies it)
@@ -309,7 +309,7 @@ namespace Wingmate
         private static string ShortName(string name) => name.StartsWith("Current") ? "Default" : name.Replace(" (BeeSpecial3D)", "");
 
         /// <summary>Warning colour of the active theme: preset swatches, then hex box + Pick… + Default (the theme's own colour).</summary>
-        private System.Windows.Controls.Primitives.UniformGrid BuildWarnColorRows()
+        private Grid BuildWarnColorRows()
         {
             Add(new TextBlock { Text = "Warning color", FontSize = 10.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 5, 0, 2) }.Ref(TextBlock.ForegroundProperty, "subTitle"));
             void SetColor(string hex) { S.SetWarnColor(hex); SaveS(); }
@@ -325,7 +325,11 @@ namespace Wingmate
                 swatches.Children.Add(sw);
             }
             Add(swatches);
-            var g = Grid2();
+            // custom colour row sized to its content (Auto), Test alert stretches over the rest (*), so nothing is clipped
+            var g = new Grid();
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            Add(g);
             var custom = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 3, 8, 3) };
             var cur = new Border { Width = 16, Height = 16, CornerRadius = new CornerRadius(3), BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center }.Ref(Border.BorderBrushProperty, "panelBorder");
             var hexBox = SmallBox("", 66);
