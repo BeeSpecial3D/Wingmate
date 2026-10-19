@@ -1,0 +1,27 @@
+{
+  "formatVersion": 1,
+  "version": "2026-10-19.1",
+  "updated": "2026-10-19T00:20:00-04:00",
+  "source": "Aion 2 Global. NCSOFT has not published official Global times; these come from client data, community trackers and player reports. 'regional' events run on each region's local server clock. 'utc' events are fixed in UTC.",
+  "regions": [
+    { "id": "NA_East", "name": "NA East", "timeZone": "America/New_York", "windowsTimeZone": "Eastern Standard Time" },
+    { "id": "NA_West", "name": "NA West", "timeZone": "America/Los_Angeles", "windowsTimeZone": "Pacific Standard Time" },
+    { "id": "EU", "name": "EU", "timeZone": "Europe/Berlin", "windowsTimeZone": "W. Europe Standard Time" }
+  ],
+  "events": [
+    { "id": "siege", "name": "Artifact Siege", "voice": "siege", "category": "pvp", "days": ["Mon","Thu","Sat"], "start": "21:00", "clock": "regional", "durationMin": 30, "confirmed": false },
+    { "id": "siege_bosses", "name": "Siege Bosses (Executors Tamasa, Argo, Kaira)", "voice": "siege_bosses", "category": "pvp", "days": ["Mon","Thu","Sat"], "start": "21:30", "clock": "regional", "durationMin": 30, "confirmed": false },
+    { "id": "nahma", "name": "Guardian Lord Nahma", "voice": "nahma", "category": "pvp", "days": ["Fri","Sun"], "start": "21:00", "clock": "regional", "durationMin": 30, "confirmed": false },
+    { "id": "watcher_kaira", "name": "Watcher Kaira", "voice": "watcher_kaira", "category": "pvp", "days": ["daily"], "start": "01:00", "repeatEveryMin": 180, "clock": "regional", "durationMin": 30, "confirmed": false },
+    { "id": "rift", "name": "Spacetime Rift portals", "voice": "rift", "category": "pvp", "days": ["daily"], "start": "02:00", "repeatEveryMin": 180, "clock": "regional", "durationMin": 10, "confirmed": false, "note": "Recheck after DST (EU Oct 25, US Nov 1)." },
+    { "id": "arena_day", "name": "Arena of Tactics (10v10)", "voice": "arena", "category": "pvp", "days": ["daily"], "start": "11:00", "clock": "regional", "durationMin": 180, "confirmed": false, "unverified": true },
+    { "id": "arena_evening", "name": "Arena of Tactics (10v10) evening", "voice": "arena", "category": "pvp", "days": ["daily"], "start": "19:00", "clock": "regional", "durationMin": 120, "confirmed": false, "unverified": true },
+    { "id": "weekly_reset", "name": "Weekly reset", "voice": "weekly_reset", "category": "reset", "days": ["Wed"], "start": "07:00", "clock": "utc", "durationMin": 0, "confirmed": false },
+    { "id": "shugo", "name": "Shugo Festival", "voice": "shugo", "category": "pve", "optional": true, "days": ["daily"], "start": "00:00", "repeatEveryMin": 60, "clock": "regional", "durationMin": 10, "confirmed": false },
+    { "id": "invasion", "name": "Dimensional Invasion (Beritra air raid)", "voice": "invasion", "category": "pve", "optional": true, "days": ["daily"], "start": "00:30", "repeatEveryMin": 60, "clock": "regional", "durationMin": 15, "confirmed": false }
+  ],
+  "resets": [
+    { "id": "daily_reset", "name": "Daily reset", "days": ["daily"], "start": "07:00", "clock": "utc" },
+    { "id": "weekly_reset", "name": "Weekly reset", "days": ["Wed"], "start": "07:00", "clock": "utc" }
+  ]
+}

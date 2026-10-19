@@ -1,0 +1,20 @@
+# build output
+bin/
+obj/
+out/
+publish/
+Releases/
+*.nupkg
+TestResults/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# local / private
+*.log
+.env
+DEPLOY.md

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Runs on Linux: compiles only the UI-free Core files of the app. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\src\Wingmate\Core\Schedule.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\Checklist.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\Settings.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\Characters.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\Themes.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\Feedback.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\Release.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+</Project>
