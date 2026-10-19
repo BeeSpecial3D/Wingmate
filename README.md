@@ -2,12 +2,57 @@
 
 A free companion app for **Aion 2** by BeeSpecial3D.
 
-![Wingmate: launcher, checklist and Abyss alerts](assets/screenshot.png)
+![Wingmate in Aion 2: Abyss alerts at the top, launcher and Settings on the right, checklist bottom left](docs/images/overview.jpg)
 
-- **Abyss and event alerts.** A small countdown overlay for the Abyss and server events (Artifact Siege, Nahma, Rift portals, Arena and more), with spoken warnings from Bella before each one starts. NA and EU times.
-- **Checklists for each character.** Daily and weekly lists that reset on their own, plus your own custom lists.
-- **Themes.** Current (the default), Elyos, Asmodian, Abyss, Honey, Midnight and Light, each with its own opacity and warning color.
-- **Updates itself.** New versions download quietly in the background and install the next time you start Wingmate.
+### Abyss and event alerts
+A small countdown overlay for the Abyss and server events (Artifact Siege, Nahma, Rift portals, Arena and more), with spoken warnings from Bella before each one starts. NA and EU times.
+
+![Abyss alerts overlay](docs/images/alerts.png)
+
+### Checklists for each character
+Daily and weekly lists that reset on their own, plus your own custom lists.
+
+<img src="docs/images/checklist.png" alt="Checklist with dailies and weeklies" width="360">
+
+### Launcher
+Pick your region and character, and open or close the alerts and checklist windows.
+
+<img src="docs/images/launcher.png" alt="Wingmate launcher" width="360">
+
+### Settings
+Text size, theme, voice volume, which alerts to hear, warning color, opacity and click-through, all in one place.
+
+<img src="docs/images/settings.png" alt="Settings window in the Honey theme" width="360">
+
+### Themes
+Current (the default), Elyos, Asmodian, Abyss, Honey, Midnight and Light, each with its own opacity and warning color.
+
+<table>
+  <tr>
+    <td><img src="docs/images/theme-asmodian.jpg" alt="Asmodian theme in game"></td>
+    <td><img src="docs/images/theme-honey.jpg" alt="Honey theme in game"></td>
+  </tr>
+  <tr>
+    <td align="center">Asmodian</td>
+    <td align="center">Honey</td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td><img src="docs/images/checklist.png" alt="Checklist, Current theme"></td>
+    <td><img src="docs/images/checklist-asmodian.png" alt="Checklist, Asmodian theme"></td>
+    <td><img src="docs/images/checklist-honey.png" alt="Checklist, Honey theme"></td>
+  </tr>
+  <tr>
+    <td align="center">Current</td>
+    <td align="center">Asmodian</td>
+    <td align="center">Honey</td>
+  </tr>
+</table>
+
+### Updates itself
+New versions download quietly in the background and install the next time you start Wingmate.
 
 **Wingmate never touches the game.** It doesn't automate anything, read game memory, or hook your keyboard or mouse. It is a separate window that sits on top of the game. The optional click-through hotkey uses the standard Windows hotkey API.
 
