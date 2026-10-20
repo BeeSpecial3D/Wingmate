@@ -32,7 +32,7 @@ namespace Wingmate
         /// <summary>Sets every Th.* resource (new frozen brushes, so DynamicResource users repaint) and notifies code-built views.</summary>
         public static void Apply(string? id)
         {
-            Current = Set.Get(id);
+            Current = string.Equals((id ?? "").Trim(), CustomTheme.Id, StringComparison.OrdinalIgnoreCase) ? BuildCustom() : Set.Get(id);
             var res = Application.Current.Resources;
             foreach (var (token, hex) in Current.Colors)
             {
@@ -41,6 +41,15 @@ namespace Wingmate
                 res["Th." + token] = b;
             }
             Changed?.Invoke();
+        }
+
+        /// <summary>The Custom theme from the user's settings; its default warning colour is its start theme's.</summary>
+        public static ThemeSet.Theme BuildCustom()
+        {
+            var s = App.Settings;
+            var start = Set.Get(s.CustomBase);
+            if (start.Colors.TryGetValue("warn", out var w) && w.Length == 9) AppSettings.ThemeWarnDefaults[CustomTheme.Id] = "#" + w[3..];
+            return CustomTheme.Build(start, s.CustomColors);
         }
 
         public static Brush Br(string token) => (Brush)Application.Current.Resources["Th." + token];

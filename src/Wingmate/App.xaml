@@ -220,6 +220,60 @@
         </Setter.Value>
       </Setter>
     </Style>
+    <!-- plain text "Menu" button on the alerts and checklist windows (opens the launcher); theme colours -->
+    <Style x:Key="MenuTextButton" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="FontSize" Value="10.5"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="{DynamicResource Th.text}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Height="18" CornerRadius="4" Padding="6,0" BorderThickness="1"
+                    Background="{DynamicResource Th.buttonBg}" BorderBrush="{DynamicResource Th.buttonBorder}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Th.buttonHoverBg}"/>
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Th.buttonHoverBorder}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <!-- padlock: closed = window locked (click-through), open = unlocked. Tag "locked" switches the drawing. -->
+    <Style x:Key="LockButton" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Width="18" Height="18" CornerRadius="4" Background="Transparent">
+              <Canvas Width="14" Height="14" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Path x:Name="Shackle" Data="M 9.4,7 L 9.4,3.6 A 2.4,2.4 0 0 0 4.6,3.6 L 4.6,4.6" Stroke="{DynamicResource Th.iconStroke}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                <Path x:Name="Body" Data="M 3.6,7 L 10.4,7 A 0.8,0.8 0 0 1 11.2,7.8 L 11.2,12 A 0.8,0.8 0 0 1 10.4,12.8 L 3.6,12.8 A 0.8,0.8 0 0 1 2.8,12 L 2.8,7.8 A 0.8,0.8 0 0 1 3.6,7 Z"
+                      Stroke="{DynamicResource Th.iconStroke}" StrokeThickness="1.3"/>
+                <Ellipse x:Name="Hole" Canvas.Left="6.3" Canvas.Top="9.1" Width="1.4" Height="1.6" Fill="{DynamicResource Th.iconStroke}"/>
+              </Canvas>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="Tag" Value="locked">
+                <Setter TargetName="Shackle" Property="Data" Value="M 4.6,7 L 4.6,4.8 A 2.4,2.4 0 0 1 9.4,4.8 L 9.4,7"/>
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Th.iconHoverBg}"/>
+                <Setter TargetName="Shackle" Property="Stroke" Value="{DynamicResource Th.iconHover}"/>
+                <Setter TargetName="Body" Property="Stroke" Value="{DynamicResource Th.iconHover}"/>
+                <Setter TargetName="Hole" Property="Fill" Value="{DynamicResource Th.iconHover}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
     <Style x:Key="GearButton" TargetType="Button">
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Focusable" Value="False"/>

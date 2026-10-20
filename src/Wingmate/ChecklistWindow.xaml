@@ -33,15 +33,13 @@
             <TextBlock x:Name="ResetText" FontSize="10" Foreground="{DynamicResource Th.faint}" TextTrimming="CharacterEllipsis"/>
           </StackPanel>
           <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-            <Border x:Name="ClickBadge" Visibility="Collapsed" Background="#CC8A2BE2" CornerRadius="3" Padding="4,0" Margin="4,0,0,0">
-              <TextBlock Text="CLICK-THROUGH" FontSize="9" FontWeight="SemiBold" Foreground="White"/>
-            </Border>
             <Border x:Name="MutedBadge" Visibility="Collapsed" Background="#CC5A6270" CornerRadius="3" Padding="4,0" Margin="4,0,0,0">
               <TextBlock Text="MUTED" FontSize="9" FontWeight="SemiBold" Foreground="White"/>
             </Border>
           </StackPanel>
           <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,-2,0,0" VerticalAlignment="Top">
-            <Button Style="{StaticResource HomeButton}" VerticalAlignment="Top" ToolTip="Open launcher" Click="Home_Click"/>
+            <Border x:Name="LockSlot" Width="18" Height="18" Margin="0,0,4,0" VerticalAlignment="Top" IsHitTestVisible="False"/> <!-- padlock lives in LockOverlay (stays clickable while locked) -->
+            <Button Style="{StaticResource MenuTextButton}" Content="Menu" VerticalAlignment="Top" ToolTip="Open the Wingmate menu (launcher)" Click="Home_Click"/>
           </StackPanel>
           <Button Grid.Column="3" Style="{StaticResource CloseButton}" Margin="2,-2,-6,0" VerticalAlignment="Top" ToolTip="Close" Click="Close_Click" Focusable="False"/>
         </Grid>

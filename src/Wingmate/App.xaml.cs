@@ -78,7 +78,7 @@ namespace Wingmate
             CreateTray();
             try { _hotkey = new Hotkey(); _hotkey.Pressed += ToggleBothClickThrough; ApplyHotkey(); }
             catch (Exception ex) { Log.Write("hotkey: " + ex.Message); }
-            ShowLauncher();
+            OpenStartupWindows();
             if (!Release.DataIsSeparateFromInstall(AppSettings.Dir, AppContext.BaseDirectory))
                 Log.Write("warning: data folder and program folder overlap: " + AppContext.BaseDirectory);
             Updates.ReadyChanged += RefreshUpdateUi;
@@ -128,9 +128,9 @@ namespace Wingmate
             _trayMute = new WF.ToolStripMenuItem("Mute voice", null, (s, a) => SetMuted(!Settings.Muted));
             m.Items.Add(_trayMute);
             m.Items.Add("Test alert", null, (s, a) => TestAlert());
-            _trayClick = new WF.ToolStripMenuItem("Alerts click-through", null, (s, a) => _abyss?.SetClickThrough(!_abyss.ClickThrough));
+            _trayClick = new WF.ToolStripMenuItem("Alert window lock", null, (s, a) => _abyss?.SetClickThrough(!_abyss.ClickThrough));
             m.Items.Add(_trayClick);
-            _trayClickList = new WF.ToolStripMenuItem("Checklist click-through", null, (s, a) => _checklist?.SetClickThrough(!_checklist.ClickThrough));
+            _trayClickList = new WF.ToolStripMenuItem("Checklist window lock", null, (s, a) => _checklist?.SetClickThrough(!_checklist.ClickThrough));
             m.Items.Add(_trayClickList);
             m.Items.Add(new WF.ToolStripSeparator());
             m.Items.Add("Send feedback", null, (s, a) => OpenFeedback());
@@ -259,6 +259,29 @@ namespace Wingmate
             _launcher?.RefreshState();
         }
 
+        // ------------------------------------------------------------ Custom theme
+        /// <summary>"Start from current theme": Custom becomes a copy of the active theme, then switches to it.</summary>
+        public void StartCustomFromCurrent()
+        {
+            if (Th.Current.Id == CustomTheme.Id) return;
+            Settings.StartCustomFrom(Th.Current);
+            SetTheme(CustomTheme.Id);
+        }
+
+        /// <summary>Changes one Custom colour and repaints everything live (switches to Custom if needed).</summary>
+        public void SetCustomColor(string key, string hex)
+        {
+            Settings.SetCustomColor(key, hex);
+            SetTheme(CustomTheme.Id);
+        }
+
+        /// <summary>One Custom colour back to its start theme's colour.</summary>
+        public void ResetCustomColor(string key)
+        {
+            Settings.CustomColors?.Remove(key);
+            SetTheme(CustomTheme.Id);
+        }
+
         // ------------------------------------------------------------ copy a list to other characters
         /// <summary>Copies a list of the current character into the given characters (unchecked, merged by name, no duplicates).</summary>
         public string CopyListTo(ChecklistSection sec, System.Collections.Generic.IEnumerable<string> characterIds)
@@ -293,6 +316,7 @@ namespace Wingmate
                 if (!ok) return;
                 if (dontAsk) { Settings.AskBeforeQuit = false; Settings.Save(); }
             }
+            RememberOpenWindows(); // saved by ExitApp
             ExitApp();
         }
 
@@ -305,7 +329,10 @@ namespace Wingmate
                 var wa = SystemParameters.WorkArea;
                 _launcher.Left = wa.Left + (wa.Width - _launcher.ActualWidth) / 2;
                 _launcher.Top = wa.Top + (wa.Height - _launcher.ActualHeight) / 2;
+                Settings.LauncherLeft = Math.Round(_launcher.Left); Settings.LauncherTop = Math.Round(_launcher.Top);
             }
+            else { Settings.LauncherLeft = null; Settings.LauncherTop = null; }
+            if (_settings != null) _settings.ResetPosition(); else { Settings.SettingsLeft = null; Settings.SettingsTop = null; }
             Settings.Save();
         }
 
@@ -331,6 +358,16 @@ namespace Wingmate
 
         public void PreviewCelebration() => _checklist?.PreviewCelebration();
         public bool CanPreviewCelebration => ChecklistOpen && _checklist!.CanPreview;
+        /// <summary>Padlock tooltip: the padlock toggles both ways; the hotkey (if on), tray and Settings are the alternatives.</summary>
+        public static string LockTip(bool locked, string window)
+        {
+            var s = Settings;
+            string hk = s.HotkeyEnabled ? Hotkey.Describe(s.HotkeyModifiers, s.HotkeyKey) + ", " : "";
+            return locked
+                ? $"Locked: clicks pass through the {window} window to the game. Click to unlock (or use {hk}the tray icon or Settings)."
+                : $"Unlocked. Click to lock the {window} window so clicks pass through to the game (or use {hk}the tray icon or Settings).";
+        }
+
         public bool? AbyssClickThrough => _abyss != null && _abyss.IsVisible ? _abyss.ClickThrough : null;
         public void SetAbyssClickThrough(bool on) => _abyss?.SetClickThrough(on);
         public bool? ChecklistClickThrough => _checklist != null && _checklist.IsVisible ? _checklist.ClickThrough : null;
@@ -356,6 +393,7 @@ namespace Wingmate
             if (Settings.HotkeyEnabled && Hotkey.IsReserved(m, k)) { _hotkey.Clear(); HotkeyNote = "That combo is used by your other overlay. Pick another."; return false; }
             bool ok = _hotkey.Set(Settings.HotkeyEnabled, m, k);
             HotkeyNote = ok ? "" : $"{Hotkey.Describe(m, k)} is already in use by another app. Pick another.";
+            _abyss?.RefreshBadges(); _checklist?.RefreshBadges(); // padlock tooltips name the hotkey
             return ok;
         }
 
@@ -433,6 +471,29 @@ namespace Wingmate
         {
             try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
             catch (Exception ex) { Log.Write("open url: " + ex.Message); }
+        }
+
+        /// <summary>Startup: the windows that were open when Wingmate was last closed with the launcher's × (each at its
+        /// saved position, brought on-screen), or just the launcher on first run. Never starts with nothing visible.</summary>
+        private void OpenStartupWindows()
+        {
+            var open = Settings.StartupWindows;
+            if (open == null) { ShowLauncher(); return; }
+            if (open.Contains("alerts")) ShowAbyss();
+            if (open.Contains("checklist")) ShowChecklist();
+            if (open.Contains("launcher") || (!AbyssOpen && !ChecklistOpen)) ShowLauncher();
+            if (open.Contains("settings")) ToggleSettings();
+        }
+
+        /// <summary>Remembers which windows are open (the launcher's × quit), for the next start.</summary>
+        private void RememberOpenWindows()
+        {
+            var list = new System.Collections.Generic.List<string>();
+            if (_launcher != null && _launcher.IsVisible) list.Add("launcher");
+            if (AbyssOpen) list.Add("alerts");
+            if (ChecklistOpen) list.Add("checklist");
+            if (_settings != null && _settings.IsVisible) list.Add("settings");
+            Settings.OpenAtExit = list;
         }
 
         public void ExitApp()

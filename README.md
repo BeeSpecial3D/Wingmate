@@ -15,17 +15,20 @@ Daily and weekly lists that reset on their own, plus your own custom lists.
 <img src="docs/images/checklist.png" alt="Checklist with dailies and weeklies" width="360">
 
 ### Launcher
-Pick your region and character, and open or close the alerts and checklist windows.
+Pick your region and character, and open or close the alerts and checklist windows. The **Menu** button on the alerts and checklist windows brings the launcher back. Wingmate remembers where you put the launcher and Settings, and if you close Wingmate with the launcher's **×**, the windows you had open come back where you left them next time.
 
 <img src="docs/images/launcher.png" alt="Wingmate launcher" width="360">
 
+### Lock windows
+Click the **padlock** on the alerts or checklist window to lock it: clicks then pass straight through to the game. The padlock itself stays clickable, so click it again to unlock. You can also use **Alert window lock** and **Checklist window lock** in Settings or the tray menu, or the optional window lock hotkey (Ctrl+Alt+K by default).
+
 ### Settings
-Text size, theme, voice volume, which alerts to hear, warning color, opacity and click-through, all in one place.
+Text size, theme, voice volume, which alerts to hear, warning color, opacity and window locks, all in one place.
 
 <img src="docs/images/settings.png" alt="Settings window in the Honey theme" width="360">
 
 ### Themes
-Current (the default), Elyos, Asmodian, Abyss, Honey, Midnight and Light, each with its own opacity and warning color.
+Current (the default), Elyos, Asmodian, Abyss, Honey, Midnight and Light, each with its own opacity and warning color. Or pick **Custom** and choose every color yourself (background, text, borders, accents, checkmarks and more); **Start from current theme** copies the theme you like as a starting point.
 
 <table>
   <tr>
@@ -54,7 +57,7 @@ Current (the default), Elyos, Asmodian, Abyss, Honey, Midnight and Light, each w
 ### Updates itself
 New versions download quietly in the background and install the next time you start Wingmate.
 
-**Wingmate never touches the game.** It doesn't automate anything, read game memory, or hook your keyboard or mouse. It is a separate window that sits on top of the game. The optional click-through hotkey uses the standard Windows hotkey API.
+**Wingmate never touches the game.** It doesn't automate anything, read game memory, or hook your keyboard or mouse. It is a separate window that sits on top of the game. The optional window lock hotkey uses the standard Windows hotkey API.
 
 ## Install
 

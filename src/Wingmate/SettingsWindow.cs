@@ -28,7 +28,8 @@ namespace Wingmate
             FontFamily = new FontFamily("Segoe UI"); FontSize = 12; this.Ref(ForegroundProperty, "text");
             UseLayoutRounding = true; TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
             try { Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/Assets/wingmate.ico")); } catch { }
-            if (near != null && near.IsVisible) { Left = near.Left + near.ActualWidth + 8; Top = near.Top; WindowStartupLocation = WindowStartupLocation.Manual; }
+            if (WindowSnap.TryRestore(this, App.Settings.SettingsLeft, App.Settings.SettingsTop)) { } // last position (brought on-screen when shown)
+            else if (near != null && near.IsVisible) { Left = near.Left + near.ActualWidth + 8; Top = near.Top; WindowStartupLocation = WindowStartupLocation.Manual; }
             else WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
             var root = new DockPanel();
@@ -65,8 +66,8 @@ namespace Wingmate
             _sync = true; // building sets slider ranges, which must not write settings
             try { Build(); } finally { _sync = false; }
 
-            MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) { try { DragMove(); } catch { } WindowSnap.Clamp(this); } };
-            WindowSnap.Attach(this);
+            MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) { try { DragMove(); } catch { } WindowSnap.Clamp(this); SavePosition(); } };
+            WindowSnap.Attach(this, SavePosition);
             IsVisibleChanged += (s, e) => { if (IsVisible) Refresh(); };
             Th.Changed += Refresh; // colours set by refreshers (swatch borders) follow the theme
             Closed += (s, e) => Th.Changed -= Refresh;
@@ -91,6 +92,25 @@ namespace Wingmate
                 Text = title, FontSize = 10.5, FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(0, _body.Children.Count == 0 ? 2 : 10, 0, 3),
             }.Ref(TextBlock.ForegroundProperty, "title"));
+        }
+
+        /// <summary>Remembers where Settings is, so it reopens there (only saves when it actually moved).</summary>
+        private void SavePosition()
+        {
+            if (double.IsNaN(Left) || double.IsNaN(Top) || !IsVisible) return;
+            double l = Math.Round(Left), t = Math.Round(Top);
+            if (S.SettingsLeft == l && S.SettingsTop == t) return;
+            S.SettingsLeft = l; S.SettingsTop = t;
+            S.Save();
+        }
+
+        /// <summary>"Reset window positions": back to the centre of the screen (the caller saves).</summary>
+        public void ResetPosition()
+        {
+            var wa = SystemParameters.WorkArea;
+            Left = wa.Left + (wa.Width - ActualWidth) / 2;
+            Top = wa.Top + Math.Max(0, (wa.Height - ActualHeight) / 2);
+            S.SettingsLeft = Math.Round(Left); S.SettingsTop = Math.Round(Top);
         }
 
         private void Add(UIElement e) => _body.Children.Add(e);
@@ -257,10 +277,10 @@ namespace Wingmate
             SliderRow("Opacity", 40, 100, () => Math.Round(S.WindowOpacity * 100), v => App.Current.SetOpacity(Math.Clamp(v, 40, 100) / 100.0),
                 tip: "All windows. Each theme keeps its own opacity.");
             var cg = Grid2();
-            Check("Alerts click-through", () => App.Current.AbyssClickThrough == true, on => App.Current.SetAbyssClickThrough(on),
-                () => App.Current.AbyssClickThrough != null, cg, "Clicks pass through the alerts window (only while it is showing)");
-            Check("Checklist click-through", () => App.Current.ChecklistClickThrough == true, on => App.Current.SetChecklistClickThrough(on),
-                () => App.Current.ChecklistClickThrough != null, cg, "Clicks pass through the checklist window (only while it is showing)");
+            Check("Alert window lock", () => App.Current.AbyssClickThrough == true, on => App.Current.SetAbyssClickThrough(on),
+                () => App.Current.AbyssClickThrough != null, cg, "Locked: clicks pass through the alerts window to the game (only while it is showing)");
+            Check("Checklist window lock", () => App.Current.ChecklistClickThrough == true, on => App.Current.SetChecklistClickThrough(on),
+                () => App.Current.ChecklistClickThrough != null, cg, "Locked: clicks pass through the checklist window to the game (only while it is showing)");
             BuildHotkeyRow();
             var og = Grid2();
             Check("Auto-minimize launcher", () => S.LauncherAutoMinimize, on => { S.LauncherAutoMinimize = on; SaveS(); }, into: og,
@@ -298,7 +318,89 @@ namespace Wingmate
                 _refreshers.Add(() => rb.IsChecked = Th.Current.Id == id);
                 wrap.Children.Add(rb);
             }
+            // the user's own theme, always last
+            {
+                var dot = new Ellipse { Width = 10, Height = 10, StrokeThickness = 2, Margin = new Thickness(0, 0, 5, 0), VerticalAlignment = VerticalAlignment.Center };
+                var label = new StackPanel { Orientation = Orientation.Horizontal };
+                label.Children.Add(dot);
+                label.Children.Add(new TextBlock { Text = CustomTheme.Name, VerticalAlignment = VerticalAlignment.Center });
+                var rb = new RadioButton { Content = label, GroupName = "theme", Style = Res<Style>("Pill"), Margin = new Thickness(0, 0, 6, 4),
+                    ToolTip = "Your own colors. Use \u201CStart from current theme\u201D to begin from the theme you like." };
+                rb.Checked += (s, e) => { if (!_sync) App.Current.SetTheme(CustomTheme.Id); };
+                _refreshers.Add(() =>
+                {
+                    rb.IsChecked = Th.Current.Id == CustomTheme.Id;
+                    var c = Th.Current.Id == CustomTheme.Id ? Th.Current : Th.BuildCustom();
+                    Color Opaque(string hex) { var k = (Color)ColorConverter.ConvertFromString(hex); return Color.FromRgb(k.R, k.G, k.B); }
+                    dot.Fill = new SolidColorBrush(Opaque(c.Colors["panelBg"]));
+                    dot.Stroke = new SolidColorBrush(Opaque(c.Colors["title"]));
+                });
+                wrap.Children.Add(rb);
+            }
             Add(wrap);
+            BuildCustomEditor();
+        }
+
+        /// <summary>"Start from current theme" plus, while Custom is selected, one row per colour: swatch, name, hex box,
+        /// Pick\u2026 and Default (back to the start theme's colour). Every change repaints all windows live.</summary>
+        private void BuildCustomEditor()
+        {
+            Small("Start from current theme", () => App.Current.StartCustomFromCurrent(), null, () => Th.Current.Id != CustomTheme.Id)
+                .ToolTip = "Copy the colors of the theme you're using into Custom, then switch to Custom";
+            var panel = new StackPanel { Margin = new Thickness(0, 2, 0, 2) };
+            _refreshers.Add(() => panel.Visibility = Th.Current.Id == CustomTheme.Id ? Visibility.Visible : Visibility.Collapsed);
+            panel.Children.Add(new TextBlock { Text = "Custom colors", FontSize = 10.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 3, 0, 2) }.Ref(TextBlock.ForegroundProperty, "subTitle"));
+            Add(panel);
+            string StartColor(CustomTheme.Group g) => CustomTheme.ColorOf(Th.Set.Get(S.CustomBase), g);
+            foreach (var g in CustomTheme.Groups)
+            {
+                var grp = g;
+                ColorRow(panel, grp.Label, grp.Tip,
+                    get: () => CustomTheme.ColorOf(Th.Current, grp),
+                    set: hex => App.Current.SetCustomColor(grp.Key, hex),
+                    reset: () => App.Current.ResetCustomColor(grp.Key),
+                    isDefault: () => !(S.CustomColors?.ContainsKey(grp.Key) ?? false) || S.CustomColors[grp.Key] == StartColor(grp),
+                    defaultTip: () => $"Back to {ShortName(Th.Set.Get(S.CustomBase).Name)}'s color ({StartColor(grp)})");
+            }
+            ColorRow(panel, "Warning", "Alert flash and the \u201Cstarting soon\u201D look (same as Warning color under Abyss alerts)",
+                get: () => S.ActiveWarnColor,
+                set: hex => { S.SetWarnColor(hex); SaveS(); },
+                reset: () => { S.ResetWarnColor(); SaveS(); },
+                isDefault: () => S.ActiveWarnColor == AppSettings.DefaultWarnColor(S.Theme),
+                defaultTip: () => $"Back to the start theme's warning color ({AppSettings.DefaultWarnColor(S.Theme)})");
+        }
+
+        /// <summary>One colour row: swatch (click = pick), name, hex box (Enter applies), Pick\u2026 and Default.</summary>
+        private void ColorRow(Panel into, string label, string tip, Func<string> get, Action<string> set, Action reset, Func<bool> isDefault, Func<string> defaultTip)
+        {
+            var g = new Grid { Margin = new Thickness(0, 1, 8, 1), ToolTip = tip };
+            foreach (var w in new[] { GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto, GridLength.Auto, GridLength.Auto })
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = w });
+            var sw = new Border { Width = 16, Height = 16, CornerRadius = new CornerRadius(3), BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center,
+                Cursor = Cursors.Hand, ToolTip = "Pick a color" }.Ref(Border.BorderBrushProperty, "panelBorder");
+            var name = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 4, 0), TextTrimming = TextTrimming.CharacterEllipsis };
+            var hexBox = SmallBox("", 62);
+            hexBox.MaxLength = 7; hexBox.TextAlignment = TextAlignment.Left; hexBox.Margin = new Thickness(0, 0, 4, 0); hexBox.ToolTip = "Type a hex color like #FF8800, then Enter";
+            void ApplyHex() { if (WarnColors.TryParse(hexBox.Text) != null && WarnColors.Normalize(hexBox.Text) != WarnColors.Normalize(get())) set(WarnColors.Normalize(hexBox.Text)); else Refresh(); }
+            hexBox.KeyDown += (s, e) => { if (e.Key == Key.Enter) { ApplyHex(); e.Handled = true; } else if (e.Key == Key.Escape) { Refresh(); Keyboard.ClearFocus(); e.Handled = true; } };
+            hexBox.LostKeyboardFocus += (s, e) => ApplyHex();
+            void PickNow() { var r = ColorPickerDialog.Pick(this, get()); if (r != null) set(r); }
+            sw.MouseLeftButtonDown += (s, e) => { e.Handled = true; PickNow(); };
+            var pick = new Button { Content = "Pick\u2026", Style = Res<Style>("DialogButton"), MinWidth = 0, Focusable = false, FontWeight = FontWeights.Normal, Margin = new Thickness(0, 0, 4, 0) };
+            pick.Click += (s, e) => PickNow();
+            var def = new Button { Content = "Default", Style = Res<Style>("DialogButton"), MinWidth = 0, Focusable = false, FontWeight = FontWeights.Normal };
+            def.Click += (s, e) => reset();
+            _refreshers.Add(() =>
+            {
+                var c = WarnColors.Parse(get());
+                sw.Background = new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B));
+                if (!hexBox.IsKeyboardFocused) hexBox.Text = WarnColors.Normalize(get());
+                def.IsEnabled = !isDefault();
+                def.ToolTip = defaultTip();
+            });
+            Grid.SetColumn(name, 1); Grid.SetColumn(hexBox, 2); Grid.SetColumn(pick, 3); Grid.SetColumn(def, 4);
+            g.Children.Add(sw); g.Children.Add(name); g.Children.Add(hexBox); g.Children.Add(pick); g.Children.Add(def);
+            into.Children.Add(g);
         }
 
         /// <summary>Picker order: Current, Elyos, Asmodian, Abyss, Honey, Midnight, Light (Midnight beside Light); any other themes after.</summary>
@@ -359,12 +461,12 @@ namespace Wingmate
             return g; // the caller puts Test alert next to the custom colour
         }
 
-        /// <summary>Optional click-through hotkey: on/off plus a "press new keys" box. RegisterHotKey only.</summary>
+        /// <summary>Optional window lock (click-through) hotkey: on/off plus a "press new keys" box. RegisterHotKey only.</summary>
         private void BuildHotkeyRow()
         {
             var row = new DockPanel { Margin = new Thickness(0, 2, 0, 0) };
-            var cb = Check("Click-through hotkey", () => S.HotkeyEnabled, on => { S.HotkeyEnabled = on; App.Current.ApplyHotkey(); SaveS(); }, into: row,
-                tip: "Toggles click-through for the alerts and checklist together");
+            var cb = Check("Window lock hotkey", () => S.HotkeyEnabled, on => { S.HotkeyEnabled = on; App.Current.ApplyHotkey(); SaveS(); }, into: row,
+                tip: "Locks or unlocks the alerts and checklist windows together");
             DockPanel.SetDock(cb, Dock.Left);
             var box = new TextBox
             {

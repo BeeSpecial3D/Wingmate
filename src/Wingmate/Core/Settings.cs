@@ -108,6 +108,44 @@ namespace Wingmate.Core
         public bool AskBeforeQuit { get; set; } = true;
         /// <summary>Checklist window title; empty means the default "Wingmate".</summary>
         public string ChecklistTitle { get; set; } = "";
+        /// <summary>Custom theme: the built-in theme it starts from (missing or unknown = Current).</summary>
+        public string CustomBase { get; set; } = "current";
+        /// <summary>Custom theme colours the user picked: CustomTheme group key -> "#RRGGBB". Missing = the start theme's colour.</summary>
+        public Dictionary<string, string> CustomColors { get; set; } = new();
+        /// <summary>Last launcher position; null = centred (first run).</summary>
+        public double? LauncherLeft { get; set; }
+        public double? LauncherTop { get; set; }
+        /// <summary>Last Settings window position; null = next to the launcher.</summary>
+        public double? SettingsLeft { get; set; }
+        public double? SettingsTop { get; set; }
+
+        /// <summary>Windows that were open when Wingmate was last closed with the launcher's ×: "launcher", "alerts",
+        /// "checklist", "settings". Null = never saved (first run), so startup shows just the launcher as before.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<string>? OpenAtExit { get; set; }
+        public static readonly string[] WindowNames = { "launcher", "alerts", "checklist", "settings" };
+
+        /// <summary>Which windows to open at startup: the saved set (known names only), or null for the first-run default.</summary>
+        [JsonIgnore] public IReadOnlyList<string>? StartupWindows =>
+            OpenAtExit?.Select(n => (n ?? "").Trim().ToLowerInvariant()).Where(n => WindowNames.Contains(n)).Distinct().ToList();
+
+        /// <summary>Sets one Custom colour (invalid input or an unknown key is ignored).</summary>
+        public void SetCustomColor(string key, string? hex)
+        {
+            if (CustomTheme.Find(key) == null || WarnColors.TryParse(hex) == null) return;
+            CustomColors ??= new();
+            CustomColors[key] = WarnColors.Normalize(hex);
+        }
+
+        /// <summary>"Start from current theme": Custom takes the active theme's colours, warning colour and opacity.</summary>
+        public void StartCustomFrom(ThemeSet.Theme t)
+        {
+            if (t.Id == CustomTheme.Id) return;
+            CustomBase = t.Id;
+            CustomColors = CustomTheme.Snapshot(t);
+            ThemeWarnColor ??= new(); ThemeOpacity ??= new();
+            ThemeWarnColor[CustomTheme.Id] = WarnColorFor(t.Id);
+            ThemeOpacity[CustomTheme.Id] = OpacityFor(t.Id);
+        }
 
         public static string Dir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Wingmate");
         private static string FilePath => Path.Combine(Dir, "settings.json");
@@ -132,9 +170,28 @@ namespace Wingmate.Core
         {
             ThemeOpacity ??= new();
             ThemeWarnColor ??= new();
+            Sanitize();
             if (SettingsVersion < 4) MigrateV4();
             if (SettingsVersion < 5) MigrateV5();
             if (SettingsVersion < 6) MigrateV6();
+            if (SettingsVersion < 7) MigrateV7();
+        }
+
+        /// <summary>v7: Custom theme and remembered launcher/Settings positions. Nothing to convert: older files simply have
+        /// none (Custom starts as a copy of Current, both windows open where they used to).</summary>
+        private void MigrateV7()
+        {
+            SettingsVersion = 7;
+        }
+
+        /// <summary>Repairs what a hand-edited or newer file may contain; runs on every load and keeps everything valid.</summary>
+        private void Sanitize()
+        {
+            CustomColors ??= new();
+            foreach (var k in CustomColors.Keys.ToList())
+                if (CustomTheme.Find(k) == null || WarnColors.TryParse(CustomColors[k]) == null) CustomColors.Remove(k);
+                else CustomColors[k] = WarnColors.Normalize(CustomColors[k]);
+            if (string.IsNullOrWhiteSpace(CustomBase) || CustomBase.Trim().ToLowerInvariant() == CustomTheme.Id) CustomBase = "current";
         }
 
         /// <summary>v6: the single warning colour becomes the selected theme's colour. The untouched old default (red)

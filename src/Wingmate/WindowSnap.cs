@@ -48,6 +48,20 @@ namespace Wingmate
             catch (Exception ex) { Core.Log.Write("snap: " + ex.Message); }
         }
 
+        /// <summary>Puts a window at a saved position (DIPs) if it is roughly on the virtual desktop; false = no usable position
+        /// (first run, or a monitor that is gone), so the caller keeps its default placement. Once shown, <see cref="Attach"/>
+        /// clamps it fully onto the nearest monitor, so a window saved half off a screen comes back on.</summary>
+        public static bool TryRestore(Window w, double? left, double? top)
+        {
+            if (left is not double l || top is not double t || !double.IsFinite(l) || !double.IsFinite(t)) return false;
+            double vl = SystemParameters.VirtualScreenLeft, vt = SystemParameters.VirtualScreenTop;
+            double vr = vl + SystemParameters.VirtualScreenWidth, vb = vt + SystemParameters.VirtualScreenHeight;
+            if (l < vl - 250 || l > vr - 50 || t < vt || t > vb - 30) return false;
+            w.WindowStartupLocation = WindowStartupLocation.Manual;
+            w.Left = l; w.Top = t;
+            return true;
+        }
+
         /// <summary>Clamp once the window has been laid out (startup, restore from tray, saved positions).</summary>
         public static void ClampSoon(Window w, Action? after = null) =>
             w.Dispatcher.BeginInvoke(new Action(() => { Clamp(w, true); after?.Invoke(); }), DispatcherPriority.Background);

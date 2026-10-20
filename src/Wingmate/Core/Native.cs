@@ -31,6 +31,10 @@ namespace Wingmate.Core
             SetWindowLong(h, GWL_EXSTYLE, on ? ex | WS_EX_NOACTIVATE : ex & ~WS_EX_NOACTIVATE);
         }
 
+        /// <summary>Moves a window to a screen position in physical pixels without activating it or changing its z-order.</summary>
+        public static void MoveTo(IntPtr h, int x, int y) => SetWindowPos(h, IntPtr.Zero, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        private const uint SWP_NOZORDER = 4;
+
         public static void KeepTopmost(IntPtr h) => SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 }

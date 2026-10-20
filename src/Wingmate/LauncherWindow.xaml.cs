@@ -30,8 +30,9 @@ namespace Wingmate
                 rb.Checked += (s, e) => { App.Settings.Region = (string)((RadioButton)s).Tag; App.Current.RegionChanged(); };
                 RegionPanel.Children.Add(rb);
             }
-            Panel.MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) { try { DragMove(); } catch { } WindowSnap.Clamp(this); } };
-            WindowSnap.Attach(this);
+            WindowSnap.TryRestore(this, App.Settings.LauncherLeft, App.Settings.LauncherTop); // else centred (first run)
+            Panel.MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) { try { DragMove(); } catch { } WindowSnap.Clamp(this); SavePosition(); } };
+            WindowSnap.Attach(this, SavePosition);
             Loaded += (s, e) => FontScaler.Apply(this);
             Opacity = App.Settings.WindowOpacity;
             Panel.ContextMenuOpening += (s, e) => BuildMenu();
@@ -40,6 +41,16 @@ namespace Wingmate
             RefreshCharacter();
             // Alt+F4 / taskbar close = the × button (ask, then quit everything); the app's own shutdown passes through
             Closing += (s, e) => { if (App.Current.Exiting) return; e.Cancel = true; Dispatcher.BeginInvoke(new Action(() => App.Current.RequestQuit(this))); };
+        }
+
+        /// <summary>Remembers where the launcher is, so it reopens there (only saves when it actually moved).</summary>
+        private void SavePosition()
+        {
+            if (double.IsNaN(Left) || double.IsNaN(Top) || WindowState != WindowState.Normal) return;
+            double l = Math.Round(Left), t = Math.Round(Top);
+            if (App.Settings.LauncherLeft == l && App.Settings.LauncherTop == t) return;
+            App.Settings.LauncherLeft = l; App.Settings.LauncherTop = t;
+            App.Settings.Save();
         }
 
         private void BuildMenu()

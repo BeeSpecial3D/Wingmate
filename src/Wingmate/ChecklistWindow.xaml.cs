@@ -28,6 +28,7 @@ namespace Wingmate
         public ChecklistWindow()
         {
             InitializeComponent();
+            _lock = new LockOverlay(this, LockSlot, () => ClickThrough, () => SetClickThrough(!ClickThrough), "checklist");
             foreach (var sec in State.Sections) if (sec.IsComplete) sec.Hidden = true; // finished before last close
             CheckResets(rebuild: false);
             Width = Math.Clamp(S.ChecklistWidth, MinW, SystemParameters.VirtualScreenWidth);
@@ -106,8 +107,11 @@ namespace Wingmate
         public void RefreshBadges()
         {
             MutedBadge.Visibility = S.Muted ? Visibility.Visible : Visibility.Collapsed;
-            ClickBadge.Visibility = ClickThrough ? Visibility.Visible : Visibility.Collapsed;
+            _lock?.Refresh();
         }
+
+        /// <summary>Padlock in its own little window: clickable even while this window is locked, toggles the lock both ways.</summary>
+        private LockOverlay? _lock;
 
         /// <summary>Clicks pass through to the game. Not saved (same as the alerts window); turn off from Settings, the tray or the hotkey.</summary>
         public bool ClickThrough { get; private set; }
@@ -462,7 +466,7 @@ namespace Wingmate
                 op.Items.Add(Item(p + "%", () => App.Current.SetOpacity(v), Math.Abs(S.WindowOpacity - v) < 0.005));
             }
             Menu.Items.Add(op);
-            Menu.Items.Add(Item("Click-through (turn off from Settings or the tray icon)", () => SetClickThrough(!ClickThrough), ClickThrough));
+            Menu.Items.Add(Item("Lock window (unlock with the padlock, the tray or the hotkey)", () => SetClickThrough(!ClickThrough), ClickThrough));
             Menu.Items.Add(Item("Reset position / size", ResetLayout));
             Menu.Items.Add(Sep());
             Menu.Items.Add(Item("Open launcher", () => App.Current.ShowLauncher()));

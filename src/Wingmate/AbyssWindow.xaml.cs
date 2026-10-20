@@ -78,6 +78,7 @@ namespace Wingmate
         public AbyssWindow()
         {
             InitializeComponent();
+            _lock = new LockOverlay(this, LockSlot, () => ClickThrough, () => SetClickThrough(!ClickThrough), "alerts");
             Width = Math.Clamp(double.IsNaN(S.Width) ? DefaultWidth : S.Width, MinW, SystemParameters.VirtualScreenWidth);
             Opacity = S.WindowOpacity;
             PlaceWindow();
@@ -143,8 +144,11 @@ namespace Wingmate
         public void RefreshBadges()
         {
             MutedBadge.Visibility = S.Muted ? Visibility.Visible : Visibility.Collapsed;
-            ClickBadge.Visibility = ClickThrough ? Visibility.Visible : Visibility.Collapsed;
+            _lock?.Refresh();
         }
+
+        /// <summary>Padlock in its own little window: clickable even while this window is locked, toggles the lock both ways.</summary>
+        private LockOverlay? _lock;
 
         public void SetClickThrough(bool on)
         {
@@ -312,7 +316,7 @@ namespace Wingmate
             Menu.Items.Add(Sep());
             Menu.Items.Add(Item("Test alert", TestAlert));
             Menu.Items.Add(Item("Mute voice", () => App.Current.SetMuted(!S.Muted), S.Muted));
-            Menu.Items.Add(Item("Click-through (turn off from the tray icon)", () => SetClickThrough(!ClickThrough), ClickThrough));
+            Menu.Items.Add(Item("Lock window (unlock with the padlock, the tray or the hotkey)", () => SetClickThrough(!ClickThrough), ClickThrough));
             var op = new MenuItem { Header = "Opacity (all windows)" };
             foreach (var p in new[] { 100, 90, 80, 70, 60, 50, 40 })
             {

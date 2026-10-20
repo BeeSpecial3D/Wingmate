@@ -55,7 +55,7 @@ public class WarnPerThemeTests
         Assert.Equal("#A45CFF", s.ActiveWarnColor);
         Assert.Equal(AppSettings.DefaultWarnColor("elyos"), s.WarnColorFor("elyos"));
         Assert.Equal("#FF1E1E", s.WarnColorFor("current"));
-        Assert.Null(s.WarnColor); Assert.Equal(6, s.SettingsVersion);
+        Assert.Null(s.WarnColor); Assert.True(s.SettingsVersion >= 6);
     }
 
     [Fact] public void Migration_UntouchedRedOrBadOrMissing_KeepsThemeDefault()

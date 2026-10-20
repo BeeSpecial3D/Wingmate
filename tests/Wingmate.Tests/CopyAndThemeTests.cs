@@ -62,7 +62,7 @@ public class ListCopyTests
 
 public class ThemeTests
 {
-    static string Json()
+    internal static string Json()
     {
         for (var d = new DirectoryInfo(AppContext.BaseDirectory); d != null; d = d.Parent)
         {
