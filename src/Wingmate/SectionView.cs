@@ -78,6 +78,7 @@ namespace Wingmate
             _name.Foreground = B(TXT);
             _count.Text = $"{Section.Items.Count(i => i.Done)}/{Section.Items.Count}";
             _count.Foreground = B(ACC);
+            UpdateCountTip();
             var plus = new Button { Content = "+", Style = (Style)_win.FindResource("LinkButton"), FontSize = 14, FontWeight = FontWeights.SemiBold,
                 ToolTip = "Add an item", VerticalAlignment = VerticalAlignment.Center, Focusable = false };
             plus.Click += (s, e) => { if (!Busy) _win.AddItemTo(Section); };
@@ -106,7 +107,9 @@ namespace Wingmate
             if (Section.Collapsed) return;
             if (Section.Items.Count == 0)
                 _content.Children.Add(new TextBlock { Text = "No items yet. Click + to add one.", FontSize = 11, Foreground = B(DIM), Margin = new Thickness(2, 3, 0, 1) });
-            foreach (var item in Section.Items) _content.Children.Add(MakeRow(item).Grid);
+            else if (!CheckedItems.Visible(Section, ShowChecked).Any())
+                _content.Children.Add(new TextBlock { Text = "All checked.", FontSize = 11, Foreground = B(DIM), Margin = new Thickness(2, 3, 0, 1) });
+            foreach (var item in CheckedItems.Visible(Section, ShowChecked)) _content.Children.Add(MakeRow(item).Grid);
         }
 
         private Row MakeRow(ChecklistItem item)
@@ -129,7 +132,7 @@ namespace Wingmate
             _rows.Add(r);
 
             Point? press = null;
-            r.Grid.MouseEnter += (s, e) => { if (!Busy) r.Grid.Background = Th.Br("rowHover"); };
+            r.Grid.MouseEnter += (s, e) => { if (!Busy && !_win.ClickThrough) r.Grid.Background = Th.Br("rowHover"); };
             r.Grid.MouseLeave += (s, e) => r.Grid.Background = Brushes.Transparent;
             r.Grid.MouseLeftButtonDown += (s, e) =>
             {
@@ -152,10 +155,7 @@ namespace Wingmate
             {
                 if (press == null || Busy) return;
                 press = null;
-                bool was = Section.IsComplete;
-                item.Done = !item.Done;
-                RefreshRows();
-                _win.ItemToggled(this, was);
+                Toggle(item);
             };
             r.Grid.DragOver += (s, e) => { e.Effects = e.Data.GetDataPresent(DragFormat) ? DragDropEffects.Move : DragDropEffects.None; e.Handled = true; };
             r.Grid.Drop += (s, e) =>
@@ -169,6 +169,51 @@ namespace Wingmate
             r.Grid.ContextMenu = new ContextMenu();
             r.Grid.ContextMenuOpening += (s, e) => { _win.CommitActiveEdit(); BuildItemMenu(r.Grid.ContextMenu, r); };
             return r;
+        }
+
+        private static bool ShowChecked => App.Settings.ShowCheckedItems;
+        private static readonly Random FxRng = new();
+
+        private void UpdateCountTip()
+        {
+            int hidden = CheckedItems.HiddenCount(Section, ShowChecked);
+            _count.ToolTip = hidden == 0 ? null
+                : $"{hidden} checked item{(hidden == 1 ? " is" : "s are")} hidden. Right-click the checklist and pick Show checked items to see or uncheck {(hidden == 1 ? "it" : "them")}.";
+        }
+
+        /// <summary>Checks or unchecks an item. A checked item then warps out on its own and the rest of the list closes the gap,
+        /// unless it was the last one (the list celebration plays, as before) or checked items are shown.</summary>
+        private void Toggle(ChecklistItem item)
+        {
+            bool was = Section.IsComplete;
+            item.Done = !item.Done;
+            var row = _rows.FirstOrDefault(x => x.Item == item);
+            bool warp = row != null && CheckedItems.WarpOutOnCheck(Section, item, ShowChecked);
+            RefreshRows();
+            _win.ItemToggled(this, was); // saves; celebrates if that completed the list
+            if (warp && !Busy) WarpOutRow(row!, WarpPicker.Next(FxRng));
+        }
+
+        /// <summary>Locked window: the checkbox of every visible row (its 14 px box) in <paramref name="relativeTo"/>'s coordinates,
+        /// with the item it toggles.</summary>
+        public IEnumerable<(Rect Box, ChecklistItem Item)> CheckTargets(Visual relativeTo)
+        {
+            foreach (var r in _rows)
+            {
+                if (!r.Grid.IsVisible || !Section.Items.Contains(r.Item)) continue;
+                Rect b;
+                try { b = r.Box.TransformToAncestor(relativeTo).TransformBounds(new Rect(0, 0, Math.Max(14, r.Box.ActualWidth), Math.Max(14, r.Box.ActualHeight))); }
+                catch (InvalidOperationException) { continue; } // not in this window's tree right now
+                yield return (b, r.Item);
+            }
+        }
+
+        /// <summary>Locked window: checks or unchecks an item from its checkbox (same as a normal click on the row).</summary>
+        public bool ToggleFromLocked(ChecklistItem item)
+        {
+            if (Busy || !Section.Items.Contains(item)) return false;
+            Toggle(item);
+            return true;
         }
 
         /// <summary>Gem-like diamond check for completed lists: crown and pavilion facets with a gradient, a white shine and an outline.</summary>
@@ -197,6 +242,7 @@ namespace Wingmate
         {
             foreach (var row in _rows) ApplyRowVisual(row);
             _count.Text = $"{Section.Items.Count(i => i.Done)}/{Section.Items.Count}";
+            UpdateCountTip();
         }
 
         private void ApplyRowVisual(Row r)
@@ -230,6 +276,9 @@ namespace Wingmate
             m.Items.Add(Mi("Add item", () => _win.AddItemTo(Section)));
             if (Section.IsCustom) m.Items.Add(Mi("Rename list", () => _win.RenameSection(Section)));
             m.Items.Add(Mi("Uncheck all", () => { foreach (var i in Section.Items) i.Done = false; _win.Save(); _win.RequestRebuild(); }, Section.Items.Any(i => i.Done)));
+            var showChk = new MenuItem { Header = "Show checked items", IsChecked = ShowChecked };
+            showChk.Click += (s2, e2) => { e2.Handled = true; _win.ToggleShowChecked(); };
+            m.Items.Add(showChk);
             m.Items.Add(Mi("Move list up", () => _win.MoveSection(Section, -1), idx > 0));
             m.Items.Add(Mi("Move list down", () => _win.MoveSection(Section, 1), idx < _win.State.Sections.Count - 1));
             m.Items.Add(Mi("Hide list", () => { Section.Hidden = true; _win.Save(); _win.RequestRebuild(); }));
@@ -631,6 +680,155 @@ namespace Wingmate
                 done();
             }
             CompositionTarget.Rendering += tick;
+        }
+            // ------------------------------------------------------------ one item warps out
+        private const double ROWFX = 0.65, ROWCOL = 0.28;
+
+        /// <summary>One checked item leaves: the same three warp-outs as a finished list (0 sparkle dissolve, 1 black hole,
+        /// 2 ripple), sized to the row, then the row folds away so the items below slide up. The item stays checked in the data.</summary>
+        private void WarpOutRow(Row r, int effect)
+        {
+            _rows.Remove(r);                 // no longer a target for clicks, repaints or the list celebration
+            r.Grid.IsHitTestVisible = false;
+            r.Grid.Background = Brushes.Transparent;
+            _win.BeginFx();                  // holds list rebuilds until it's gone
+            var rc = RectOf(r.Grid);
+            if (rc.IsEmpty) rc = new Rect(0, 0, Math.Max(20, _body.ActualWidth), 18);
+            double cx = rc.X + rc.Width / 2, cy = rc.Y + rc.Height / 2;
+            var made = new List<UIElement>();
+            var glints = new List<Glint>();
+            var textBrush = new SolidColorBrush(((r.Text.Foreground as SolidColorBrush)?.Color) ?? DIM);
+            r.Text.Foreground = textBrush;
+            var baseCol = textBrush.Color;
+            var baseMargin = r.Grid.Margin;
+            var fold = new ScaleTransform(1, 1);
+            r.Grid.LayoutTransform = fold;
+
+            if (effect == 0) // sparkle dissolve: the text flashes gold and breaks into drifting sparkles
+            {
+                int n = (int)Math.Clamp(rc.Width / 14, 8, 22);
+                for (int i = 0; i < n; i++)
+                    glints.Add(new Glint { X = rc.X + 4 + FxRng.NextDouble() * Math.Max(1, rc.Width - 8), Y = rc.Y + 2 + FxRng.NextDouble() * Math.Max(1, rc.Height - 4),
+                        T0 = 0.05 + FxRng.NextDouble() * 0.4, Life = 0.25 + FxRng.NextDouble() * 0.25, S = 1.2 + FxRng.NextDouble() * 1.0,
+                        Vx = (FxRng.NextDouble() - 0.5) * 20, Vy = -8 - FxRng.NextDouble() * 14, Tw = FxRng.NextDouble() * 6,
+                        Col = FxRng.NextDouble() < 0.5 ? C("#FFFFF7E0") : C("#FFFFE094") });
+            }
+            ScaleTransform? bhScale = null; RotateTransform? bhRot = null; Ellipse? core = null, ring = null; Image? flash = null;
+            if (effect == 1) // black hole: the row spins down into a small dark core, then a flash
+            {
+                bhScale = new ScaleTransform(1, 1); bhRot = new RotateTransform();
+                r.Grid.RenderTransformOrigin = new Point(0.5, 0.5);
+                r.Grid.RenderTransform = new TransformGroup { Children = { bhScale, bhRot } };
+                ring = new Ellipse { Stroke = new LinearGradientBrush(GOLD, PURPLE, 0), IsHitTestVisible = false };
+                core = new Ellipse { Fill = Brushes.Black, IsHitTestVisible = false };
+                _fx.Children.Add(ring); _fx.Children.Add(core); made.Add(ring); made.Add(core);
+            }
+            List<(Run Run, double Tc, Point P, Image? G)>? chars = null;
+            if (effect == 2) // ripple: the letters vanish in random order, each with a tiny sparkle
+            {
+                chars = new();
+                string s0 = r.Text.Text; var col = textBrush.Color;
+                r.Text.Inlines.Clear();
+                var runs = new List<Run>();
+                foreach (var ch in s0) { var run = new Run(ch.ToString()) { Foreground = new SolidColorBrush(col) }; r.Text.Inlines.Add(run); if (!char.IsWhiteSpace(ch)) runs.Add(run); }
+                try { r.Grid.UpdateLayout(); } catch { }
+                var order = Enumerable.Range(0, runs.Count).OrderBy(_ => FxRng.Next()).ToList();
+                for (int i = 0; i < order.Count; i++)
+                {
+                    var run = runs[order[i]];
+                    Point pt;
+                    try
+                    {
+                        var a = run.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+                        pt = r.Text.TranslatePoint(new Point(a.Left + 3, a.Top + a.Height / 2), _body);
+                    }
+                    catch { pt = new Point(cx, cy); }
+                    chars.Add((run, 0.05 + 0.8 * i / Math.Max(1, order.Count - 1), pt, null));
+                }
+            }
+
+            var sw = Stopwatch.StartNew();
+            bool finished = false;
+            EventHandler? tick = null;
+            void Finish()
+            {
+                if (finished) return;
+                finished = true;
+                CompositionTarget.Rendering -= tick;
+                try
+                {
+                    _content.Children.Remove(r.Grid);
+                    foreach (var g in glints) if (g.El != null) _fx.Children.Remove(g.El);
+                    if (chars != null) foreach (var c in chars) if (c.G != null) _fx.Children.Remove(c.G);
+                    if (flash != null) _fx.Children.Remove(flash);
+                    foreach (var el in made) _fx.Children.Remove(el);
+                    if (Section.Items.Count > 0 && !CheckedItems.Visible(Section, ShowChecked).Any() && !Busy && !Section.Collapsed)
+                        _content.Children.Add(FontScaler.Scaled(new TextBlock { Text = "All checked.", FontSize = 11, Foreground = B(DIM), Margin = new Thickness(2, 3, 0, 1) }));
+                }
+                catch (Exception ex) { Log.Write("item warp: " + ex.Message); }
+                _win.EndFx();
+            }
+            tick = (s, e) =>
+            {
+                if (finished) return;
+                double t = sw.Elapsed.TotalSeconds, p = Math.Clamp(t / ROWFX, 0, 1);
+                try
+                {
+                    if (effect == 0)
+                    {
+                        double fl = Smooth(0, 0.15, p) * (1 - Smooth(0.15, 0.45, p));
+                        textBrush.Color = Lerp(Lerp(baseCol, GOLD, Smooth(0, 0.1, p) * 0.5), FLASH, fl);
+                        r.Grid.Opacity = 1 - Smooth(0.15, 0.8, p);
+                        foreach (var q in glints)
+                        {
+                            double age = t - q.T0, inten = 0;
+                            if (age >= 0 && age <= q.Life) inten = Math.Sin(Math.PI * age / q.Life) * (0.65 + 0.35 * Math.Sin(q.Tw + age * 25));
+                            SetGlint(ref q.El, q.X + q.Vx * Math.Max(0, age), q.Y + q.Vy * Math.Max(0, age), q.S, inten, q.Col);
+                        }
+                    }
+                    else if (effect == 1)
+                    {
+                        double q = Math.Pow(Smooth(0.05, 0.85, p), 1.5);
+                        bhScale!.ScaleX = bhScale.ScaleY = Math.Max(0.001, 1 - 0.985 * q);
+                        bhRot!.Angle = q * 200;
+                        r.Grid.Opacity = 1 - Smooth(0.7, 0.9, p);
+                        double grow = Smooth(0, 0.25, p), coll = 1 - Smooth(0.8, 0.92, p), R0 = Math.Min(7, rc.Height * 0.4) * grow * coll;
+                        void Place(Ellipse el, double rad) { el.Width = el.Height = Math.Max(0, 2 * rad); Canvas.SetLeft(el, cx - rad); Canvas.SetTop(el, cy - rad); }
+                        Place(core!, R0); Place(ring!, R0 * 1.35 + 1);
+                        ring!.StrokeThickness = 1 + R0 * 0.18; ring.Opacity = 0.85 * grow * coll;
+                        double fi = Smooth(0.88, 0.93, p) * (1 - Smooth(0.94, 1.0, p));
+                        SetGlint(ref flash, cx, cy, 4, fi * 1.3, C("#FFFFEBCC"));
+                    }
+                    else if (chars != null)
+                    {
+                        for (int i = 0; i < chars.Count; i++)
+                        {
+                            var c = chars[i];
+                            ((SolidColorBrush)c.Run.Foreground).Opacity = 1 - Smooth(c.Tc - 0.03, c.Tc + 0.07, p);
+                            double gi = Math.Exp(-Math.Pow((p - c.Tc - 0.02) / 0.05, 2));
+                            var g = c.G;
+                            SetGlint(ref g, c.P.X, c.P.Y, 2.0, gi > 0.02 ? gi * 0.95 : 0, C("#FFFFF2CC"));
+                            chars[i] = (c.Run, c.Tc, c.P, g);
+                        }
+                        r.Box.Opacity = r.Mark.Opacity = 1 - Smooth(0.6, 1.0, p);
+                    }
+                    // the rest of the list closes the gap
+                    if (t >= ROWFX)
+                    {
+                        double c = Smooth(ROWFX, ROWFX + ROWCOL, t);
+                        fold.ScaleY = Math.Max(0.001, 1 - c);
+                        r.Grid.Margin = new Thickness(baseMargin.Left, baseMargin.Top * (1 - c), baseMargin.Right, baseMargin.Bottom * (1 - c));
+                        r.Grid.Opacity = Math.Min(r.Grid.Opacity, 1 - c);
+                    }
+                    if (t >= ROWFX + ROWCOL) Finish();
+                }
+                catch (Exception ex) { Log.Write("item warp: " + ex); Finish(); }
+            };
+            CompositionTarget.Rendering += tick;
+            // safety: frames can stop while every window is hidden; never leave the list waiting
+            var guard = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            guard.Tick += (s, e) => { guard.Stop(); Finish(); };
+            guard.Start();
         }
     }
 }

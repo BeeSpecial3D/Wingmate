@@ -29,6 +29,7 @@ namespace Wingmate
         {
             InitializeComponent();
             _lock = new LockOverlay(this, LockSlot, () => ClickThrough, () => SetClickThrough(!ClickThrough), "checklist");
+            InitLockedInput();
             foreach (var sec in State.Sections) if (sec.IsComplete) sec.Hidden = true; // finished before last close
             CheckResets(rebuild: false);
             Width = Math.Clamp(S.ChecklistWidth, MinW, SystemParameters.VirtualScreenWidth);
@@ -121,6 +122,7 @@ namespace Wingmate
             if (on) CommitActiveEdit();
             ClickThrough = on;
             if (Handle != IntPtr.Zero) Native.SetClickThrough(Handle, on);
+            ApplyLockedInput();
             RefreshBadges();
             App.Current.RefreshSettingsWindow();
         }
@@ -303,6 +305,23 @@ namespace Wingmate
             });
         }
 
+        /// <summary>An item warp-out is running: list rebuilds wait until it ends (same as during a celebration).</summary>
+        public void BeginFx() => _running++;
+
+        /// <summary>"Show checked items": checked items stay in view (green check, struck through) so a misclick can be undone.</summary>
+        public void ToggleShowChecked()
+        {
+            CommitActiveEdit();
+            S.ShowCheckedItems = !S.ShowCheckedItems;
+            S.Save();
+            RequestRebuild();
+        }
+        public void EndFx()
+        {
+            _running = Math.Max(0, _running - 1);
+            if (_running == 0 && _pendingRebuild) Rebuild();
+        }
+
         public void MoveItem(string itemId, ChecklistSection target, int index)
         {
             var src = State.Sections.FirstOrDefault(s => s.Items.Any(i => i.Id == itemId));
@@ -453,8 +472,17 @@ namespace Wingmate
             Menu.Items.Clear();
             Menu.Items.Add(Item("+ New list", NewList));
             Menu.Items.Add(Item("Rename title", StartTitleEdit));
+            var cls = new MenuItem { Header = "Class" };
+            var curClass = CharacterClasses.Normalize(State.Class);
+            foreach (var name in CharacterClasses.Names)
+            {
+                var n = name;
+                cls.Items.Add(Item(n, () => App.Current.SetCharacterClass(n), n == curClass));
+            }
+            Menu.Items.Add(cls);
             int hidden = State.Sections.Count(x => x.Hidden);
             Menu.Items.Add(Item($"Show hidden sections ({hidden})", () => ShowHidden_Click(this, new RoutedEventArgs()), enabled: hidden > 0));
+            Menu.Items.Add(Item("Show checked items", ToggleShowChecked, S.ShowCheckedItems));
             Menu.Items.Add(Item("Reset all lists\u2026", () => App.Current.ResetAllLists(this)));
             Menu.Items.Add(Item("Preview celebration", PreviewCelebration, enabled: CanPreview));
             Menu.Items.Add(Sep());

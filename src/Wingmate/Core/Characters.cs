@@ -70,12 +70,13 @@ namespace Wingmate.Core
 
         /// <summary>Saves the first name: renames the placeholder character in place (same id, lists and progress). Returns
         /// false (and changes nothing) for an empty or placeholder name, or when no name is needed.</summary>
-        public bool SetFirstName(string? name)
+        public bool SetFirstName(string? name, string? characterClass = null)
         {
             var n = (name ?? "").Trim();
             if (!NeedsName || IsPlaceholderName(n)) return false;
             var c = Characters[0];
             c.Name = n.Length > MaxNameLength ? n[..MaxNameLength].TrimEnd() : n;
+            if (CharacterClasses.IsKnown(characterClass)) c.Class = CharacterClasses.Normalize(characterClass);
             CurrentId = c.Id;
             return true;
         }
@@ -91,7 +92,19 @@ namespace Wingmate.Core
             return c;
         }
 
-        public bool Select(string id)
+        /// <summary>Sets (or clears, with "" / null) a character's class. Only the class changes: name, lists and progress stay.
+        /// False for an unknown class or character.</summary>
+        public bool SetClass(string id, string? characterClass)
+        {
+            var c = Characters.FirstOrDefault(x => x.Id == id);
+            if (c == null) return false;
+            var n = CharacterClasses.Normalize(characterClass);
+            if (n.Length == 0 && !string.IsNullOrWhiteSpace(characterClass)) return false;
+            c.Class = n;
+            return true;
+        }
+
+                public bool Select(string id)
         {
             if (!Characters.Any(c => c.Id == id)) return false;
             CurrentId = id;
@@ -126,6 +139,8 @@ namespace Wingmate.Core
             {
                 if (string.IsNullOrWhiteSpace(c.Id)) c.Id = Guid.NewGuid().ToString("N");
                 if (string.IsNullOrWhiteSpace(c.Name)) c.Name = DefaultName;
+                if (CharacterClasses.IsKnown(c.Class)) c.Class = CharacterClasses.Normalize(c.Class); // proper casing
+                else c.Class = (c.Class ?? "").Trim(); // missing (older files) -> ""; anything else is kept as it was
                 c.Sections ??= new List<ChecklistSection>();
                 c.EnsureBuiltIns();
             }

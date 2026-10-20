@@ -143,6 +143,10 @@ namespace Wingmate
         {
             var c = App.Book.Current;
             CharName.Text = c.Name;
+            bool hasClass = Core.CharacterClasses.IsKnown(c.Class);
+            ClassText.Text = hasClass ? Core.CharacterClasses.Normalize(c.Class) : "Class";
+            ClassBtn.ToolTip = hasClass ? $"{c.Name}'s class: {ClassText.Text}. Click to change it." : $"Pick {c.Name}'s class (used by Guide)";
+            GuideSub.Text = hasClass ? $"{ClassText.Text} guide on aion2-guides.info" : "Class guide on aion2-guides.info";
             bool ask = App.Book.NeedsName;
             NamePrompt.Visibility = ask ? Visibility.Visible : Visibility.Collapsed;
             CharRow.Visibility = ask ? Visibility.Collapsed : Visibility.Visible;
@@ -172,10 +176,65 @@ namespace Wingmate
 
         private void NameSave_Click(object sender, RoutedEventArgs e) => SaveName();
 
+        /// <summary>Class picked in the first-run box; saved together with the name.</summary>
+        private string _firstClass = "";
+
         private void SaveName()
         {
-            if (!App.Current.SaveFirstName(NameBox.Text)) { NameBox.Focus(); NameBox.SelectAll(); }
+            if (!App.Current.SaveFirstName(NameBox.Text, _firstClass)) { NameBox.Focus(); NameBox.SelectAll(); }
         }
+
+        // ------------------------------------------------------------ class
+        /// <summary>The class dropdown: one checked entry per class, plus "No class" when one is set. Follows the text size.</summary>
+        private ContextMenu ClassMenu(UIElement target, string current, Action<string> pick, string? header = null)
+        {
+            var m = new ContextMenu { PlacementTarget = target, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+            if (header != null) m.Items.Add(new MenuItem { Header = header, IsEnabled = false });
+            foreach (var name in Core.CharacterClasses.Names)
+            {
+                var n = name;
+                var mi = new MenuItem { Header = n, IsChecked = n == current };
+                mi.Click += (s2, e2) => { e2.Handled = true; pick(n); };
+                m.Items.Add(mi);
+            }
+            if (current.Length > 0)
+            {
+                m.Items.Add(new Separator { Style = (Style)FindResource("DarkSep") });
+                var none = new MenuItem { Header = "No class" };
+                none.Click += (s2, e2) => { e2.Handled = true; pick(""); };
+                m.Items.Add(none);
+            }
+            m.Opened += (s2, e2) => FontScaler.Apply(m);
+            return m;
+        }
+
+        private void FirstClass_Click(object sender, RoutedEventArgs e)
+        {
+            ClassMenu(FirstClassBtn, _firstClass, n =>
+            {
+                _firstClass = n;
+                FirstClassText.Text = n.Length > 0 ? n : "Class (optional)";
+            }).IsOpen = true;
+        }
+
+        private void Class_Click(object sender, RoutedEventArgs e)
+        {
+            ClassMenu(ClassBtn, Core.CharacterClasses.Normalize(App.Book.Current.Class), n => App.Current.SetCharacterClass(n)).IsOpen = true;
+        }
+
+        /// <summary>Guide with no class yet: pick it first (saved), then the guide opens.</summary>
+        public void AskClassForGuide()
+        {
+            if (CharRow.Visibility != Visibility.Visible) return;
+            Activate();
+            ClassMenu(BtnGuide, "", n =>
+            {
+                App.Current.SetCharacterClass(n);
+                if (Core.CharacterClasses.IsKnown(App.Book.Current.Class)) App.Current.OpenClassGuide();
+            }, header: "Pick your class first").IsOpen = true;
+        }
+
+        private void BtnGuide_Click(object sender, RoutedEventArgs e) => App.Current.OpenClassGuide();
 
         private void CharName_Click(object sender, RoutedEventArgs e)
         {
@@ -195,8 +254,17 @@ namespace Wingmate
             m.Items.Add(new Separator { Style = (Style)FindResource("DarkSep") });
             m.Items.Add(Mi("Add character", () => App.Current.AddCharacter()));
             m.Items.Add(Mi("Rename\u2026", () => App.Current.RenameCharacter()));
+            var cls = new MenuItem { Header = "Class" };
+            var curClass = Core.CharacterClasses.Normalize(cur.Class);
+            foreach (var name in Core.CharacterClasses.Names)
+            {
+                var n = name;
+                cls.Items.Add(Mi(n, () => App.Current.SetCharacterClass(n), n == curClass));
+            }
+            m.Items.Add(cls);
             if (App.Book.Characters.Count > 1)
                 m.Items.Add(Mi($"Remove {cur.Name}\u2026", () => App.Current.RemoveCharacter(cur.Id, this)));
+            m.Opened += (s2, e2) => FontScaler.Apply(m);
             m.IsOpen = true;
         }
 

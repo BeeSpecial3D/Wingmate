@@ -105,6 +105,9 @@ namespace Wingmate.Core
         /// <summary>Raised after every save so Settings, menus and windows stay in sync (one source of truth).</summary>
         public static event Action? Saved;
         public bool CelebrationVoice { get; set; } = true;
+        /// <summary>Checklist: keep checked items in view (green check, struck through) so they can be unchecked. Off: each item
+        /// disappears as it's checked.</summary>
+        public bool ShowCheckedItems { get; set; }
         /// <summary>Colour theme id from themes.json; missing or unknown = "current" (the original look).</summary>
         public string Theme { get; set; } = "current";
         /// <summary>Launcher × asks "Quit Wingmate?" first (unticked by "Don't ask again"). Older files have none = ask.</summary>

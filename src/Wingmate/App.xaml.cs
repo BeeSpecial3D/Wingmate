@@ -313,6 +313,24 @@ namespace Wingmate
             _checklist?.Dispatcher.BeginInvoke(new Action(() => _checklist?.StartTitleEdit()), DispatcherPriority.Loaded);
         }
 
+        /// <summary>Sets the current character's class (only the class: name, lists and progress stay) and saves.</summary>
+        public void SetCharacterClass(string? characterClass)
+        {
+            if (Book.ReadOnly || !Book.SetClass(Book.Current.Id, characterClass)) return;
+            SaveBook();
+            Log.Write("character class set");
+            _launcher?.RefreshCharacter();
+        }
+
+        /// <summary>Guide: opens the current character's class page on AION 2 Global Guides in the default browser. With no
+        /// name yet the launcher asks for the name first (like the checklist); with no class it asks for the class first.</summary>
+        public void OpenClassGuide()
+        {
+            if (Book.NeedsName) { ShowLauncher(); _launcher?.FocusNameBox(); return; }
+            if (!CharacterClasses.IsKnown(Book.Current.Class)) { ShowLauncher(); _launcher?.AskClassForGuide(); return; }
+            OpenUrl(CharacterClasses.GuideUrlFor(Book.Current.Class));
+        }
+
         public void CharacterRenamed(bool entered = false) { _launcher?.RefreshCharacter(); if (entered) TestEgg.MaybeRun(Book.Current.Name); }
 
         public void ToggleSettings()
@@ -663,9 +681,9 @@ namespace Wingmate
 
         /// <summary>First run: the name from the launcher's name box becomes the placeholder character's name (renamed in place,
         /// lists and progress kept). Unlocks the checklist; reopens it if the window restore skipped it. False for an empty name.</summary>
-        public bool SaveFirstName(string? name)
+        public bool SaveFirstName(string? name, string? characterClass = null)
         {
-            if (!Book.SetFirstName(name)) return false;
+            if (!Book.SetFirstName(name, characterClass)) return false;
             SaveBook();
             Log.Write("first character name saved");
             _checklist?.LoadCharacter();

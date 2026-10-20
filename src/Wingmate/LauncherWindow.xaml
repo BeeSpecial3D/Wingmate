@@ -68,10 +68,24 @@
                          Margin="8,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
             </Grid>
           </DockPanel>
+          <Button x:Name="FirstClassBtn" Style="{StaticResource BigButton}" Margin="0,6,0,0" Click="FirstClass_Click"
+                  ToolTip="Your class (optional). You can change it later next to your character name." AutomationProperties.Name="Class">
+            <DockPanel>
+              <TextBlock Text="&#x25BE;" DockPanel.Dock="Right" Foreground="{DynamicResource Th.muted}" Margin="6,0,0,0"/>
+              <TextBlock x:Name="FirstClassText" Text="Class (optional)" FontWeight="Normal" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+          </Button>
           <TextBlock Text="Your checklist unlocks once it's saved." FontSize="10.5" Foreground="{DynamicResource Th.muted}" Margin="0,6,0,0" TextWrapping="Wrap"/>
         </StackPanel>
       </Border>
       <DockPanel x:Name="CharRow" Margin="0,0,0,10">
+        <Button x:Name="ClassBtn" Style="{StaticResource BigButton}" DockPanel.Dock="Right" Margin="6,0,0,0" MinWidth="104" Click="Class_Click"
+                ToolTip="Your character's class (used by Guide)" AutomationProperties.Name="Class">
+          <DockPanel>
+            <TextBlock Text="&#x25BE;" DockPanel.Dock="Right" Foreground="{DynamicResource Th.muted}" Margin="6,0,0,0"/>
+            <TextBlock x:Name="ClassText" Text="Class" TextTrimming="CharacterEllipsis"/>
+          </DockPanel>
+        </Button>
         <Button x:Name="CharBtn" Style="{StaticResource BigButton}" Margin="0" Click="CharName_Click" ToolTip="Pick a character, add or remove one">
           <DockPanel>
             <TextBlock Text="&#x25BE;" DockPanel.Dock="Right" Foreground="{DynamicResource Th.muted}" Margin="6,0,0,0"/>
@@ -103,19 +117,18 @@
           </Border>
         </Grid>
       </Button>
-      <Button x:Name="BtnStats" Style="{StaticResource SoonButton}" ToolTip="Coming in a future update" AutomationProperties.Name="Character stats, coming soon">
+      <Button x:Name="BtnGuide" Style="{StaticResource BigButton}" Click="BtnGuide_Click" AutomationProperties.Name="Class guide"
+              ToolTip="Class guides by AION 2 Global Guides (aion2-guides.info). Opens your class page in your browser.">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
           <StackPanel>
-            <TextBlock Text="Character stats" TextTrimming="CharacterEllipsis"/>
-            <TextBlock Text="Not available yet" FontSize="10.5" FontWeight="Normal" Foreground="{DynamicResource Th.faint}" TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="Guide" TextTrimming="CharacterEllipsis"/>
+            <TextBlock x:Name="GuideSub" Text="Class guide on aion2-guides.info" FontSize="10.5" FontWeight="Normal" Foreground="{DynamicResource Th.muted}" TextTrimming="CharacterEllipsis"/>
           </StackPanel>
-          <Border Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center" CornerRadius="3" Padding="5,1" Background="{DynamicResource Th.badgeBg}">
-            <TextBlock Text="COMING SOON" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource Th.muted}"/>
-          </Border>
+          <TextBlock Grid.Column="1" Text="&#x2197;" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource Th.muted}"/>
         </Grid>
       </Button>
       <TextBlock x:Name="Status" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource Th.liveText}" Margin="0,0,0,6" Visibility="Collapsed"/>

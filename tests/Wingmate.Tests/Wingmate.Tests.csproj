@@ -18,6 +18,8 @@
     <Compile Include="..\..\src\Wingmate\Core\UpdatePrompt.cs" />
     <Compile Include="..\..\src\Wingmate\Core\ColorMath.cs" />
     <Compile Include="..\..\src\Wingmate\Core\MenuCompanions.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\CharacterClasses.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\LockedInput.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />

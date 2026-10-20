@@ -12,19 +12,23 @@ A small countdown overlay for the Abyss and server events (Artifact Siege, Nahma
 ### Checklists for each character
 Daily and weekly lists that reset on their own, plus your own custom lists.
 
+Checked items disappear one at a time as you check them, and checking the last one sets off the list celebration. Checked items aren't lost: the daily and weekly resets (and **Reset all lists**) bring them back unchecked. Misclicked one? Turn on **Show checked items** in the checklist's right-click menu to see checked items again (green check, struck through) and click one to uncheck it.
+
 <img src="docs/images/checklist.png" alt="Checklist with dailies and weeklies" width="360">
 
 ### Launcher
 Pick your region and character, and open or close the alerts and checklist windows. The **Menu** button on the alerts and checklist windows opens or closes the launcher; Settings and Custom colors close with it and come back when it reopens. Drag the launcher's edges or its corner grip to resize it. Wingmate remembers where you put the launcher and Settings (and the launcher's size), and if you close Wingmate with the launcher's **×**, the windows you had open come back where you left them next time.
 
-**First run:** the launcher asks for your character name first. Type it and press **Save** (or Enter); the Checklist unlocks once a name is saved. The alerts work right away.
+**First run:** the launcher asks for your character name first. Type it and press **Save** (or Enter); the Checklist unlocks once a name is saved. You can also pick your class there (optional). The alerts work right away.
 
-**Coming soon:** Character stats.
+**Class:** each character can have a class (Gladiator, Templar, Assassin, Ranger, Sorcerer, Spiritmaster, Cleric or Chanter). Set or change it with the **Class** button next to the character name, on the first-run screen, or from the **Class** entry in the right-click menus. Changing class never touches your lists.
+
+**Guide:** the launcher's **Guide** button opens your class's guide in your browser. Class guides by AION 2 Global Guides ([aion2-guides.info](https://aion2-guides.info)). If you haven't picked a class yet, Guide asks for it first.
 
 <img src="docs/images/launcher.png" alt="Wingmate launcher" width="360">
 
 ### Lock windows
-Click the **padlock** on the alerts or checklist window to lock it: clicks then pass straight through to the game. The padlock itself stays clickable, so click it again to unlock. You can also use **Alert window lock** and **Checklist window lock** in Settings or the tray menu, or the optional window lock hotkey (Ctrl+Alt+K by default).
+Click the **padlock** on the alerts or checklist window to lock it: clicks then pass straight through to the game. The padlock itself stays clickable, so click it again to unlock. While the checklist is locked you can still scroll it with the mouse wheel and tick its checkboxes; its header, buttons and edges still pass clicks through to the game. You can also use **Alert window lock** and **Checklist window lock** in Settings or the tray menu, or the optional window lock hotkey (Ctrl+Alt+K by default).
 
 ### Settings
 Text size, theme, voice volume, which alerts to hear, opacity and window locks, all in one place. Text size applies right away to every window, including Settings, Custom colors, the color picker and the update pop-up.

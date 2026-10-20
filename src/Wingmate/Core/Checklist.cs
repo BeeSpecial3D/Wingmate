@@ -33,6 +33,9 @@ namespace Wingmate.Core
         /// <summary>Character this checklist belongs to (in the multi-character file).</summary>
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
+        /// <summary>The character's class (one of CharacterClasses, e.g. "Templar"); "" until the player picks one.
+        /// Optional: older files without it load as "". It never affects the lists.</summary>
+        public string Class { get; set; } = "";
         public DateTime? LastDailyReset { get; set; }   // UTC reset boundary last applied
         public DateTime? LastWeeklyReset { get; set; }
         public List<ChecklistSection> Sections { get; set; } = new();
@@ -255,6 +258,22 @@ namespace Wingmate.Core
             var counted = state.Sections.Where(s => s.Items.Count > 0 && (!s.Hidden || s.IsComplete)).ToList();
             return counted.Count >= MinListsForAllDone && counted.All(s => s.IsComplete);
         }
+    }
+
+    /// <summary>Checked items leave the list one at a time: each warps out as it's checked and stays hidden (still saved as
+    /// checked) until a reset unchecks it, or until "Show checked items" is on.</summary>
+    public static class CheckedItems
+    {
+        /// <summary>The items a list shows: all of them with "Show checked items" on, otherwise only the unchecked ones.</summary>
+        public static IEnumerable<ChecklistItem> Visible(ChecklistSection s, bool showChecked) => showChecked ? s.Items : s.Items.Where(i => !i.Done);
+
+        /// <summary>How many checked items the list is hiding right now.</summary>
+        public static int HiddenCount(ChecklistSection s, bool showChecked) => showChecked ? 0 : s.Items.Count(i => i.Done);
+
+        /// <summary>Just checked: warp this one item out on its own? Not while checked items are shown, and not when it was the last
+        /// one (then the list's own celebration plays and takes it away with the list, as before).</summary>
+        public static bool WarpOutOnCheck(ChecklistSection s, ChecklistItem item, bool showChecked) =>
+            !showChecked && item.Done && s.Items.Contains(item) && !s.IsComplete;
     }
 
     public static class WarpPicker

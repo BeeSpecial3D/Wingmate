@@ -24,6 +24,26 @@ namespace Wingmate.Core
             SetWindowLong(h, GWL_EXSTYLE, ex);
         }
 
+        [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
+        [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
+
+        /// <summary>Mouse position in physical screen pixels (a plain read, no hook).</summary>
+        public static bool TryGetCursorPos(out int x, out int y)
+        {
+            bool ok = GetCursorPos(out var p);
+            x = p.X; y = p.Y;
+            return ok;
+        }
+
+        /// <summary>Turns only the click-through bit on or off (the window stays layered); used while a locked window
+        /// lets the mouse reach its list and checkboxes.</summary>
+        public static void SetTransparentBit(IntPtr h, bool on)
+        {
+            int ex = GetWindowLong(h, GWL_EXSTYLE);
+            int nx = on ? ex | WS_EX_TRANSPARENT | WS_EX_LAYERED : ex & ~WS_EX_TRANSPARENT;
+            if (nx != ex) SetWindowLong(h, GWL_EXSTYLE, nx);
+        }
+
         /// <summary>Temporarily allow the window to take focus (for typing in the checklist), then turn it back off.</summary>
         public static void SetNoActivate(IntPtr h, bool on)
         {
