@@ -25,6 +25,7 @@ namespace Wingmate
         {
             Title = "Wingmate - Settings"; WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent;
             Topmost = true; ShowInTaskbar = false; ResizeMode = ResizeMode.NoResize; Width = 372; SizeToContent = SizeToContent.Height;
+            FontScaler.Grow(this); // wider with bigger text (the Font size setting applies here too)
             FontFamily = new FontFamily("Segoe UI"); FontSize = 12; this.Ref(ForegroundProperty, "text");
             UseLayoutRounding = true; TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
             try { Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/Assets/wingmate.ico")); } catch { }
@@ -69,6 +70,7 @@ namespace Wingmate
             MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) { try { DragMove(); } catch { } WindowSnap.Clamp(this); SavePosition(); } };
             WindowSnap.Attach(this, SavePosition);
             IsVisibleChanged += (s, e) => { if (IsVisible) Refresh(); };
+            Loaded += (s, e) => FontScaler.Apply(this);
             Th.Changed += Refresh; // colours set by refreshers (swatch borders) follow the theme
             Closed += (s, e) => Th.Changed -= Refresh;
             Refresh();
@@ -148,12 +150,12 @@ namespace Wingmate
             Add(wrap);
         }
 
-        private TextBox SmallBox(string text, double width) => new TextBox
+        private TextBox SmallBox(string text, double width) => FontScaler.Scaled(FontScaler.Grow(new TextBox
         {
             Text = text, Width = width, FontSize = 12,
             BorderThickness = new Thickness(1), Padding = new Thickness(2, 0, 2, 0),
             TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center, MaxLength = 3,
-        }.Ref(ForegroundProperty, "text").Ref(BackgroundProperty, "inputBg").Ref(BorderBrushProperty, "focus").Ref(TextBox.CaretBrushProperty, "caret");
+        }.Ref(ForegroundProperty, "text").Ref(BackgroundProperty, "inputBg").Ref(BorderBrushProperty, "focus").Ref(TextBox.CaretBrushProperty, "caret")));
 
         /// <summary>A number readout that turns into a box on click: Enter or click-away applies (clamped), Escape cancels, junk reverts.</summary>
         private FrameworkElement EditableNumber(Func<double> get, Action<double> set, double minV, double maxV, string suffix, double boxWidth)
@@ -269,8 +271,8 @@ namespace Wingmate
                     Check(t.Label, () => AlertTypes.Enabled(S.AlertChoices, ev), on => { S.AlertChoices[key] = on; SaveS(); }, into: ag, tip: t.Full);
                 }
             }
-            var tg = BuildWarnColorRows();
-            Grid.SetColumn(Small("Test alert", () => App.Current.TestAlert(), tg), 1); // takes the room left of swatch/hex/Pick…/Default
+            // the warning colour is edited in the Custom colors window since 1.0.5 (saved choices keep working on every theme)
+            Small("Test alert", () => App.Current.TestAlert(), Grid2()).ToolTip = "Show a sample alert in the current warning color";
 
             Group("WINDOWS");
             // one opacity for the launcher, alerts and checklist; each theme remembers its own (switching themes applies it)
@@ -339,66 +341,16 @@ namespace Wingmate
             BuildCustomEditor();
         }
 
-        /// <summary>"Start from current theme" plus, while Custom is selected, one row per colour: swatch, name, hex box,
-        /// Pick\u2026 and Default (back to the start theme's colour). Every change repaints all windows live.</summary>
+        /// <summary>"Start from current theme" (copies the theme in use into Custom, switches to it and opens the Custom colors
+        /// window) and "Edit custom colors" (reopens that window once a Custom theme exists). The colour rows live in
+        /// <see cref="CustomColorsWindow"/>.</summary>
         private void BuildCustomEditor()
         {
-            Small("Start from current theme", () => App.Current.StartCustomFromCurrent(), null, () => Th.Current.Id != CustomTheme.Id)
-                .ToolTip = "Copy the colors of the theme you're using into Custom, then switch to Custom";
-            var panel = new StackPanel { Margin = new Thickness(0, 2, 0, 2) };
-            _refreshers.Add(() => panel.Visibility = Th.Current.Id == CustomTheme.Id ? Visibility.Visible : Visibility.Collapsed);
-            panel.Children.Add(new TextBlock { Text = "Custom colors", FontSize = 10.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 3, 0, 2) }.Ref(TextBlock.ForegroundProperty, "subTitle"));
-            Add(panel);
-            string StartColor(CustomTheme.Group g) => CustomTheme.ColorOf(Th.Set.Get(S.CustomBase), g);
-            foreach (var g in CustomTheme.Groups)
-            {
-                var grp = g;
-                ColorRow(panel, grp.Label, grp.Tip,
-                    get: () => CustomTheme.ColorOf(Th.Current, grp),
-                    set: hex => App.Current.SetCustomColor(grp.Key, hex),
-                    reset: () => App.Current.ResetCustomColor(grp.Key),
-                    isDefault: () => !(S.CustomColors?.ContainsKey(grp.Key) ?? false) || S.CustomColors[grp.Key] == StartColor(grp),
-                    defaultTip: () => $"Back to {ShortName(Th.Set.Get(S.CustomBase).Name)}'s color ({StartColor(grp)})");
-            }
-            ColorRow(panel, "Warning", "Alert flash and the \u201Cstarting soon\u201D look (same as Warning color under Abyss alerts)",
-                get: () => S.ActiveWarnColor,
-                set: hex => { S.SetWarnColor(hex); SaveS(); },
-                reset: () => { S.ResetWarnColor(); SaveS(); },
-                isDefault: () => S.ActiveWarnColor == AppSettings.DefaultWarnColor(S.Theme),
-                defaultTip: () => $"Back to the start theme's warning color ({AppSettings.DefaultWarnColor(S.Theme)})");
-        }
-
-        /// <summary>One colour row: swatch (click = pick), name, hex box (Enter applies), Pick\u2026 and Default.</summary>
-        private void ColorRow(Panel into, string label, string tip, Func<string> get, Action<string> set, Action reset, Func<bool> isDefault, Func<string> defaultTip)
-        {
-            var g = new Grid { Margin = new Thickness(0, 1, 8, 1), ToolTip = tip };
-            foreach (var w in new[] { GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto, GridLength.Auto, GridLength.Auto })
-                g.ColumnDefinitions.Add(new ColumnDefinition { Width = w });
-            var sw = new Border { Width = 16, Height = 16, CornerRadius = new CornerRadius(3), BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center,
-                Cursor = Cursors.Hand, ToolTip = "Pick a color" }.Ref(Border.BorderBrushProperty, "panelBorder");
-            var name = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 4, 0), TextTrimming = TextTrimming.CharacterEllipsis };
-            var hexBox = SmallBox("", 62);
-            hexBox.MaxLength = 7; hexBox.TextAlignment = TextAlignment.Left; hexBox.Margin = new Thickness(0, 0, 4, 0); hexBox.ToolTip = "Type a hex color like #FF8800, then Enter";
-            void ApplyHex() { if (WarnColors.TryParse(hexBox.Text) != null && WarnColors.Normalize(hexBox.Text) != WarnColors.Normalize(get())) set(WarnColors.Normalize(hexBox.Text)); else Refresh(); }
-            hexBox.KeyDown += (s, e) => { if (e.Key == Key.Enter) { ApplyHex(); e.Handled = true; } else if (e.Key == Key.Escape) { Refresh(); Keyboard.ClearFocus(); e.Handled = true; } };
-            hexBox.LostKeyboardFocus += (s, e) => ApplyHex();
-            void PickNow() { var r = ColorPickerDialog.Pick(this, get()); if (r != null) set(r); }
-            sw.MouseLeftButtonDown += (s, e) => { e.Handled = true; PickNow(); };
-            var pick = new Button { Content = "Pick\u2026", Style = Res<Style>("DialogButton"), MinWidth = 0, Focusable = false, FontWeight = FontWeights.Normal, Margin = new Thickness(0, 0, 4, 0) };
-            pick.Click += (s, e) => PickNow();
-            var def = new Button { Content = "Default", Style = Res<Style>("DialogButton"), MinWidth = 0, Focusable = false, FontWeight = FontWeights.Normal };
-            def.Click += (s, e) => reset();
-            _refreshers.Add(() =>
-            {
-                var c = WarnColors.Parse(get());
-                sw.Background = new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B));
-                if (!hexBox.IsKeyboardFocused) hexBox.Text = WarnColors.Normalize(get());
-                def.IsEnabled = !isDefault();
-                def.ToolTip = defaultTip();
-            });
-            Grid.SetColumn(name, 1); Grid.SetColumn(hexBox, 2); Grid.SetColumn(pick, 3); Grid.SetColumn(def, 4);
-            g.Children.Add(sw); g.Children.Add(name); g.Children.Add(hexBox); g.Children.Add(pick); g.Children.Add(def);
-            into.Children.Add(g);
+            var row = Grid2();
+            Small("Start from current theme", () => App.Current.StartCustomFromCurrent(), row, () => Th.Current.Id != CustomTheme.Id)
+                .ToolTip = "Copy the colors of the theme you're using into Custom, switch to Custom and open the Custom colors window";
+            var edit = Small("Edit custom colors\u2026", () => App.Current.ToggleCustomColors(), row, () => S.HasCustomTheme);
+            _refreshers.Add(() => edit.ToolTip = App.Current.CustomColorsOpen ? "Close the Custom colors window" : "Open the Custom colors window");
         }
 
         /// <summary>Picker order: Current, Elyos, Asmodian, Abyss, Honey, Midnight, Light (Midnight beside Light); any other themes after.</summary>
@@ -407,57 +359,6 @@ namespace Wingmate
             all.OrderBy(t => { int i = Array.IndexOf(PickerOrder, t.Id); return i < 0 ? int.MaxValue : i; });
 
         private static string ShortName(string name) => name.StartsWith("Current") ? "Default" : name.Replace(" (BeeSpecial3D)", "");
-
-        /// <summary>Warning colour of the active theme: preset swatches, then hex box + Pick… + Default (the theme's own colour).</summary>
-        private Grid BuildWarnColorRows()
-        {
-            Add(new TextBlock { Text = "Warning color", FontSize = 10.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 5, 0, 2) }.Ref(TextBlock.ForegroundProperty, "subTitle"));
-            void SetColor(string hex) { S.SetWarnColor(hex); SaveS(); }
-            var swatches = new WrapPanel { Margin = new Thickness(0, 0, 0, 2) };
-            foreach (var (name, hex) in WarnColors.Presets)
-            {
-                var h = hex;
-                var c = WarnColors.Parse(h);
-                var sw = new Border { Width = 22, Height = 18, CornerRadius = new CornerRadius(4), Margin = new Thickness(0, 0, 6, 4), Cursor = Cursors.Hand,
-                    Background = new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B)), BorderThickness = new Thickness(2), ToolTip = name };
-                sw.MouseLeftButtonDown += (s, e) => { e.Handled = true; SetColor(h); };
-                _refreshers.Add(() => sw.BorderBrush = S.ActiveWarnColor == h ? Th.Br("focus") : Th.Br("iconHoverBg"));
-                swatches.Children.Add(sw);
-            }
-            Add(swatches);
-            // custom colour row sized to its content (Auto), Test alert stretches over the rest (*), so nothing is clipped
-            var g = new Grid();
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            Add(g);
-            var custom = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 3, 8, 3) };
-            var cur = new Border { Width = 16, Height = 16, CornerRadius = new CornerRadius(3), BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center }.Ref(Border.BorderBrushProperty, "panelBorder");
-            var hexBox = SmallBox("", 66);
-            hexBox.MaxLength = 7; hexBox.TextAlignment = TextAlignment.Left; hexBox.Margin = new Thickness(5, 0, 5, 0); hexBox.ToolTip = "Type a hex color like #FF8800, then Enter";
-            void ApplyHex() { if (WarnColors.TryParse(hexBox.Text) != null) SetColor(hexBox.Text); else Refresh(); }
-            hexBox.KeyDown += (s, e) => { if (e.Key == Key.Enter) { ApplyHex(); e.Handled = true; } else if (e.Key == Key.Escape) { Refresh(); Keyboard.ClearFocus(); e.Handled = true; } };
-            hexBox.LostKeyboardFocus += (s, e) => ApplyHex();
-            _refreshers.Add(() =>
-            {
-                var c = WarnColors.Parse(S.ActiveWarnColor);
-                cur.Background = new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B));
-                if (!hexBox.IsKeyboardFocused) hexBox.Text = S.ActiveWarnColor;
-            });
-            var pick = new Button { Content = "Pick\u2026", Style = Res<Style>("DialogButton"), MinWidth = 0, Focusable = false, FontWeight = FontWeights.Normal, Padding = new Thickness(0) };
-            pick.Click += (s, e) => { var r = ColorPickerDialog.Pick(this, S.ActiveWarnColor); if (r != null) SetColor(r); };
-            var reset = new Button { Content = "Default", Style = Res<Style>("DialogButton"), MinWidth = 0, Focusable = false, FontWeight = FontWeights.Normal,
-                Padding = new Thickness(6, 0, 6, 0), Margin = new Thickness(4, 0, 0, 0) };
-            reset.Click += (s, e) => { S.ResetWarnColor(); SaveS(); };
-            _refreshers.Add(() =>
-            {
-                var d = AppSettings.DefaultWarnColor(S.Theme);
-                reset.IsEnabled = S.ActiveWarnColor != d;
-                reset.ToolTip = $"Back to this theme's own warning color ({d})";
-            });
-            custom.Children.Add(cur); custom.Children.Add(hexBox); custom.Children.Add(pick); custom.Children.Add(reset);
-            g.Children.Add(custom);
-            return g; // the caller puts Test alert next to the custom colour
-        }
 
         /// <summary>Optional window lock (click-through) hotkey: on/off plus a "press new keys" box. RegisterHotKey only.</summary>
         private void BuildHotkeyRow()
@@ -473,6 +374,7 @@ namespace Wingmate
                 Padding = new Thickness(4, 1, 4, 1), Cursor = Cursors.Hand, ToolTip = "Click, then press the new key combo (Esc cancels)",
                 TextAlignment = TextAlignment.Center,
             }.Ref(ForegroundProperty, "text").Ref(BackgroundProperty, "fieldBg").Ref(BorderBrushProperty, "panelBorder");
+            FontScaler.Grow(box);
             _refreshers.Add(() => { if (!box.IsKeyboardFocused) box.Text = Hotkey.Describe(S.HotkeyModifiers, S.HotkeyKey); });
             // the key-combo box only shows while the hotkey is on. Hidden (not collapsed) keeps the row height, so nothing below moves.
             void SyncBox() => box.Visibility = cb.IsChecked == true ? Visibility.Visible : Visibility.Hidden;

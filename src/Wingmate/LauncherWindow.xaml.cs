@@ -256,8 +256,8 @@ namespace Wingmate
             UpdateLink.Visibility = version == null ? Visibility.Collapsed : Visibility.Visible;
             UpdateLink.Content = downloaded ? "Update ready \u00B7 Restart" : $"Update available \u00B7 v{version}";
             UpdateLink.ToolTip = version == null ? null : downloaded
-                ? $"Wingmate {version} is downloaded. Restart now to update, or it installs the next time Wingmate starts."
-                : $"Wingmate {version} is available. Click to download and install it (Wingmate restarts; your lists and settings stay).";
+                ? $"Wingmate {version} is downloaded. Click to choose Update now (restarts) or Later; otherwise it installs the next time Wingmate starts."
+                : $"Wingmate {version} is available. Click to choose Update now or Later (Update now downloads it and restarts Wingmate; your lists and settings stay).";
         }
     }
 }

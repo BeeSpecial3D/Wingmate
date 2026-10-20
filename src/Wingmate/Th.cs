@@ -49,7 +49,7 @@ namespace Wingmate
             var s = App.Settings;
             var start = Set.Get(s.CustomBase);
             if (start.Colors.TryGetValue("warn", out var w) && w.Length == 9) AppSettings.ThemeWarnDefaults[CustomTheme.Id] = "#" + w[3..];
-            return CustomTheme.Build(start, s.CustomColors);
+            return CustomTheme.Build(start, s.EffectiveCustomColors()); // includes the colour picker's live preview, if any
         }
 
         public static Brush Br(string token) => (Brush)Application.Current.Resources["Th." + token];

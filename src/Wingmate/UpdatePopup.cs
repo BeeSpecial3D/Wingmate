@@ -27,6 +27,13 @@ namespace Wingmate
 
         /// <param name="download">Downloads the update (progress 0-100); throws on failure. Null in preview.</param>
         /// <param name="apply">Saves everything, applies the update and restarts; false if it could not start. Null in preview.</param>
+        /// <summary>Font size setting: text and width grow together (called on open and whenever settings change).</summary>
+        public void ApplyFontScale()
+        {
+            MaxWidth = Math.Round(360 * FontScaler.Scale);
+            FontScaler.Apply(this);
+        }
+
         public UpdatePopup(Window? anchor, string newVersion, string currentVersion,
             Func<Action<int>, CancellationToken, Task>? download, Func<bool>? apply, bool preview)
         {
@@ -39,7 +46,7 @@ namespace Wingmate
             if (anchor != null && anchor.IsVisible && anchor.WindowState != WindowState.Minimized) { Owner = anchor; WindowStartupLocation = WindowStartupLocation.CenterOwner; }
             else WindowStartupLocation = WindowStartupLocation.CenterScreen; // primary screen
 
-            var root = new DockPanel { Width = 300 };
+            var root = FontScaler.Grow(new DockPanel { Width = 300 }); // wider with bigger text
             var head = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
             var close = new Button { Style = (Style)Application.Current.FindResource("CloseButton"), Focusable = false, ToolTip = "Later",
                 VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(8, -2, -6, 0) };
@@ -81,6 +88,7 @@ namespace Wingmate
                 var h = new WindowInteropHelper(this).Handle;
                 if (h != IntPtr.Zero) Native.OverlayStyles(h); // tool window + no-activate: clicks work, focus stays with the game
             };
+            ApplyFontScale();
             Loaded += (s, e) => { var h = new WindowInteropHelper(this).Handle; if (h != IntPtr.Zero) Native.KeepTopmost(h); WindowSnap.Clamp(this); };
             Closed += (s, e) => { try { _cts?.Cancel(); } catch { } };
         }

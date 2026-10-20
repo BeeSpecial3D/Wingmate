@@ -31,6 +31,7 @@ namespace Wingmate.Core
 
         /// <summary>The warning colour of a theme: the user's choice for it, or its default.</summary>
         public string WarnColorFor(string? themeId) =>
+            ThemeKey(themeId) == CustomTheme.Id && PreviewWarnColor != null ? PreviewWarnColor :
             ThemeWarnColor != null && ThemeWarnColor.TryGetValue(ThemeKey(themeId), out var h) && WarnColors.TryParse(h) != null ? WarnColors.Normalize(h) : DefaultWarnColor(themeId);
 
         /// <summary>Warning colour used by the alerts (and Test alert): the active theme's.</summary>
@@ -123,11 +124,46 @@ namespace Wingmate.Core
         /// <summary>Last Settings window position; null = next to the launcher.</summary>
         public double? SettingsLeft { get; set; }
         public double? SettingsTop { get; set; }
+        // ---- colour picker live preview: in memory only ([JsonIgnore]), so a save from anywhere mid-preview, or quitting
+        // with the picker open, always writes the colours as they were before the picker opened.
+        /// <summary>Key the picker uses for the Custom theme's warning colour (the colour groups use their own keys).</summary>
+        public const string PreviewWarnKey = "warn";
+        [JsonIgnore] public Dictionary<string, string> PreviewColors { get; } = new();
+        [JsonIgnore] public string? PreviewWarnColor { get; private set; }
+        [JsonIgnore] public bool HasPreview => PreviewColors.Count > 0 || PreviewWarnColor != null;
+
+        /// <summary>Shows a colour live without changing what gets saved (invalid input is ignored).</summary>
+        public void SetPreview(string key, string? hex)
+        {
+            if (WarnColors.TryParse(hex) == null) return;
+            if (key == PreviewWarnKey) PreviewWarnColor = WarnColors.Normalize(hex);
+            else if (CustomTheme.Find(key) != null) PreviewColors[key] = WarnColors.Normalize(hex);
+        }
+
+        /// <summary>Drops every live preview: the saved colours are what shows again.</summary>
+        public void ClearPreview() { PreviewColors.Clear(); PreviewWarnColor = null; }
+
+        /// <summary>Saved Custom colours with any live preview on top (what the Custom theme is built from).</summary>
+        public Dictionary<string, string> EffectiveCustomColors()
+        {
+            var d = new Dictionary<string, string>(CustomColors ?? new());
+            foreach (var (k, v) in PreviewColors) d[k] = v;
+            return d;
+        }
+
+        /// <summary>Custom colors window position (added in 1.0.5; older files have none).</summary>
+        public double? CustomColorsLeft { get; set; }
+        public double? CustomColorsTop { get; set; }
+        /// <summary>Color picker position (added in 1.0.5; older files have none).</summary>
+        public double? ColorPickerLeft { get; set; }
+        public double? ColorPickerTop { get; set; }
+        /// <summary>True once a Custom theme exists ("Start from current theme" was used, or it is the theme in use).</summary>
+        [JsonIgnore] public bool HasCustomTheme => (CustomColors?.Count ?? 0) > 0 || ThemeKey(Theme) == CustomTheme.Id;
 
         /// <summary>Windows that were open when Wingmate was last closed with the launcher's ×: "launcher", "alerts",
         /// "checklist", "settings". Null = never saved (first run), so startup shows just the launcher as before.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<string>? OpenAtExit { get; set; }
-        public static readonly string[] WindowNames = { "launcher", "alerts", "checklist", "settings" };
+        public static readonly string[] WindowNames = { "launcher", "alerts", "checklist", "settings", "customcolors" };
 
         /// <summary>Which windows to open at startup: the saved set (known names only), or null for the first-run default.</summary>
         [JsonIgnore] public IReadOnlyList<string>? StartupWindows =>

@@ -28,7 +28,7 @@
           </Border>
           <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="4,-2,0,-2">
             <Border x:Name="LockSlot" Width="18" Height="18" Margin="0,0,4,0" VerticalAlignment="Center" IsHitTestVisible="False"/> <!-- padlock lives in LockOverlay (stays clickable while locked) -->
-            <Button Style="{StaticResource MenuTextButton}" Content="Menu" VerticalAlignment="Center" ToolTip="Open the Wingmate menu (launcher)" Click="Home_Click"/>
+            <Button Style="{StaticResource MenuTextButton}" Content="Menu" VerticalAlignment="Center" ToolTip="Open or close the Wingmate menu (launcher)" Click="Home_Click"/>
           </StackPanel>
           <Button x:Name="CloseBtn" Grid.Column="4" Style="{StaticResource CloseButton}" Margin="2,-2,-6,-2" ToolTip="Close"
                   Click="Close_Click" Focusable="False"/>

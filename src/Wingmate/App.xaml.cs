@@ -120,16 +120,17 @@ namespace Wingmate
                 _updatePopup.Closed += (s, a) => _updatePopup = null;
                 _updatePopup.Show();
             }
+            else { if (_updatePopup.WindowState == WindowState.Minimized) _updatePopup.WindowState = WindowState.Normal; _updatePopup.Topmost = false; _updatePopup.Topmost = true; }
             if (startNow) _updatePopup.StartNow();
         }
 
         /// <summary>Saves everything, hands over to Velopack's updater and quits; the updater restarts Wingmate.
         /// The data folder is separate from the program folder, so lists and settings stay exactly as saved here.</summary>
-        /// <summary>Launcher link / tray item: restart into a downloaded update, or download it (in the pop-up) and then restart.</summary>
+        /// <summary>Launcher "Update available" link / tray item: (re)opens the same Update now / Later pop-up; it never downloads
+        /// or restarts by itself. Update now in the pop-up downloads (with progress) and restarts as usual.</summary>
         public void UpdateFromLink()
         {
-            if (Updates.Ready != null && _updatePopup == null) { if (!RestartToUpdate()) ShowUpdatePopup(false); return; }
-            ShowUpdatePopup(true);
+            ShowUpdatePopup(startNow: false); // not limited by the once-per-version auto pop-up rule
         }
 
         public bool RestartToUpdate()
@@ -211,7 +212,16 @@ namespace Wingmate
                 _launcher.Closed += (s, a) =>
                 {
                     _launcher = null;
+                    CloseColorTools(rememberForMenu: false);
                     MaybeQuit();
+                };
+                // the launcher is the Wingmate menu: when it goes away (Menu again, its own hide button), Settings and the
+                // colour tools go with it; a picker that is open counts as Cancel
+                _launcher.IsVisibleChanged += (s, a) =>
+                {
+                    if (Exiting) return;
+                    if (a.NewValue is false) CloseColorTools(rememberForMenu: true);
+                    else if (_menuCompanions.Pending.Count > 0) Dispatcher.BeginInvoke(new Action(ReopenMenuCompanions), DispatcherPriority.Loaded);
                 };
                 _launcher.SetUpdateOffer(Updates.HasOffer ? Updates.OfferVersion : null, Updates.Ready != null);
             }
@@ -219,6 +229,46 @@ namespace Wingmate
             if (_launcher.WindowState == WindowState.Minimized) _launcher.WindowState = WindowState.Normal;
             _launcher.Topmost = true; // stays on top like the overlays; its dialogs are owned + topmost and menus are popups, so they stay above it
             _launcher.Activate();
+        }
+
+        /// <summary>The Menu button on the alerts and checklist windows: opens the launcher (the Wingmate menu), or hides it
+        /// if it is already showing (hiding, like its own hide button, so the app never quits from here).</summary>
+        public void ToggleLauncherFromMenu()
+        {
+            if (_launcher != null && _launcher.IsVisible && _launcher.WindowState != WindowState.Minimized) _launcher.Hide();
+            else ShowLauncher();
+        }
+
+        private readonly MenuCompanions _menuCompanions = new();
+        private bool _closingWithMenu;
+
+        /// <summary>Closes Settings, the Custom colors window and an open colour picker (as Cancel: its live preview is undone).
+        /// When the launcher only hid, the windows that were open are remembered and come back when it shows again
+        /// (the picker never does).</summary>
+        private void CloseColorTools(bool rememberForMenu)
+        {
+            var open = new System.Collections.Generic.List<string>();
+            if (_settings != null && _settings.IsVisible) open.Add("settings");
+            if (_customColors != null && _customColors.IsVisible) open.Add("customcolors");
+            if (rememberForMenu) _menuCompanions.Hidden(open);
+            _closingWithMenu = true;
+            try
+            {
+                ColorPickerDialog.CancelOpen();
+                _customColors?.Close();
+                _settings?.Close();
+            }
+            finally { _closingWithMenu = false; }
+        }
+
+        /// <summary>Launcher showing again: Settings / Custom colors that closed with it reopen at their remembered positions.</summary>
+        private void ReopenMenuCompanions()
+        {
+            foreach (var name in _menuCompanions.Shown())
+            {
+                if (name == "settings" && _settings == null) ToggleSettings();
+                else if (name == "customcolors" && _customColors == null && Th.Current.Id == CustomTheme.Id) OpenCustomColors();
+            }
         }
 
         // ------------------------------------------------------------ settings (one source of truth: App.Settings)
@@ -263,7 +313,7 @@ namespace Wingmate
             _checklist?.Dispatcher.BeginInvoke(new Action(() => _checklist?.StartTitleEdit()), DispatcherPriority.Loaded);
         }
 
-        public void CharacterRenamed() { _launcher?.RefreshCharacter(); }
+        public void CharacterRenamed(bool entered = false) { _launcher?.RefreshCharacter(); if (entered) TestEgg.MaybeRun(Book.Current.Name); }
 
         public void ToggleSettings()
         {
@@ -271,7 +321,8 @@ namespace Wingmate
             if (_settings == null)
             {
                 _settings = new SettingsWindow(_launcher);
-                _settings.Closed += (s, a) => _settings = null;
+                _settings.Closed += (s, a) => { _settings = null; if (!_closingWithMenu) _menuCompanions.Touched("settings"); };
+                _menuCompanions.Touched("settings"); // opened by the user (or reopened): no longer waiting for the launcher
             }
             _settings.Show();
             _settings.Activate();
@@ -286,6 +337,7 @@ namespace Wingmate
             ApplyLook();
             _launcher?.SyncFromSettings();
             _settings?.Refresh();
+            _customColors?.Refresh();
         }
 
         public void ApplyLook()
@@ -294,6 +346,9 @@ namespace Wingmate
             if (_launcher != null) { _launcher.Opacity = op; _launcher.ApplyMinWidth(); FontScaler.Apply(_launcher); }
             if (_abyss != null) { _abyss.Opacity = op; FontScaler.Apply(_abyss); _abyss.ApplyWarnColor(); }
             if (_checklist != null) { _checklist.Opacity = op; FontScaler.Apply(_checklist); }
+            if (_settings != null) FontScaler.Apply(_settings);
+            if (_customColors != null) FontScaler.Apply(_customColors);
+            if (_updatePopup != null) _updatePopup.ApplyFontScale();
         }
 
         public void SetFontScale(double k) { Settings.FontScale = k; Settings.Save(); }
@@ -316,9 +371,38 @@ namespace Wingmate
         /// <summary>"Start from current theme": Custom becomes a copy of the active theme, then switches to it.</summary>
         public void StartCustomFromCurrent()
         {
-            if (Th.Current.Id == CustomTheme.Id) return;
+            if (Th.Current.Id == CustomTheme.Id) { OpenCustomColors(); return; }
             Settings.StartCustomFrom(Th.Current);
             SetTheme(CustomTheme.Id);
+            OpenCustomColors();
+        }
+
+        private CustomColorsWindow? _customColors;
+
+        /// <summary>The Custom colors window (one at a time). Switches to Custom first, since every edit applies to it.</summary>
+        public void OpenCustomColors()
+        {
+            if (!Settings.HasCustomTheme) return;
+            if (Th.Current.Id != CustomTheme.Id) SetTheme(CustomTheme.Id);
+            if (_customColors == null)
+            {
+                _customColors = new CustomColorsWindow((Window?)_settings ?? _launcher);
+                _customColors.Closed += (s, a) => { _customColors = null; _settings?.Refresh(); if (!_closingWithMenu) _menuCompanions.Touched("customcolors"); };
+                _menuCompanions.Touched("customcolors");
+            }
+            _customColors.Show();
+            _customColors.Activate();
+            _settings?.Refresh();
+        }
+
+        public bool CustomColorsOpen => _customColors != null;
+
+        /// <summary>Settings' "Edit custom colors…": closes the Custom colors window if it is open (its position is saved
+        /// on close), otherwise opens it.</summary>
+        public void ToggleCustomColors()
+        {
+            if (_customColors != null) _customColors.Close();
+            else OpenCustomColors();
         }
 
         /// <summary>Changes one Custom colour and repaints everything live (switches to Custom if needed).</summary>
@@ -326,6 +410,32 @@ namespace Wingmate
         {
             Settings.SetCustomColor(key, hex);
             SetTheme(CustomTheme.Id);
+        }
+
+        /// <summary>Colour picker live preview: repaints every window with the colour, in memory only (nothing saved).</summary>
+        public void PreviewColor(string key, string hex)
+        {
+            if (Th.Current.Id != CustomTheme.Id) return; // the picker only edits the Custom theme, which is active while it is open
+            Settings.SetPreview(key, hex);
+            RepaintLive();
+        }
+
+        /// <summary>Ends a live preview: back to the saved colours everywhere (OK then saves the picked one as usual).</summary>
+        public void EndPreview()
+        {
+            if (!Settings.HasPreview) return;
+            Settings.ClearPreview();
+            RepaintLive();
+        }
+
+        private void RepaintLive()
+        {
+            Th.Apply(Th.Current.Id);
+            _abyss?.ThemeChanged(); _abyss?.ApplyWarnColor();
+            _checklist?.ThemeChanged();
+            _launcher?.RefreshState();
+            _settings?.Refresh();
+            _customColors?.Refresh();
         }
 
         /// <summary>One Custom colour back to its start theme's colour.</summary>
@@ -388,6 +498,8 @@ namespace Wingmate
             }
             else { Settings.LauncherLeft = null; Settings.LauncherTop = null; }
             if (_settings != null) _settings.ResetPosition(); else { Settings.SettingsLeft = null; Settings.SettingsTop = null; }
+            if (_customColors != null) _customColors.ResetPosition(); else { Settings.CustomColorsLeft = null; Settings.CustomColorsTop = null; }
+            Settings.ColorPickerLeft = null; Settings.ColorPickerTop = null; // the picker is modal, so never open here
             Settings.Save();
         }
 
@@ -544,6 +656,7 @@ namespace Wingmate
             if (open.Contains("checklist")) { if (Book.NeedsName) _checklistSkipped = true; else ShowChecklist(); } // reopens once named
             if (open.Contains("launcher") || (!AbyssOpen && !ChecklistOpen)) ShowLauncher();
             if (open.Contains("settings")) ToggleSettings();
+            if (open.Contains("customcolors") && Th.Current.Id == CustomTheme.Id) OpenCustomColors(); // never switches the theme at startup
         }
 
         private bool _checklistSkipped;
@@ -559,6 +672,7 @@ namespace Wingmate
             _launcher?.RefreshCharacter();
             _settings?.Refresh();
             if (_checklistSkipped) { _checklistSkipped = false; ShowChecklist(); }
+            TestEgg.MaybeRun(Book.Current.Name);
             return true;
         }
 
@@ -570,7 +684,8 @@ namespace Wingmate
             if (AbyssOpen) list.Add("alerts");
             if (ChecklistOpen || (_checklistSkipped && Book.NeedsName)) list.Add("checklist"); // skipped for a missing name: still wanted
             if (_settings != null && _settings.IsVisible) list.Add("settings");
-            Settings.OpenAtExit = list;
+            if (_customColors != null && _customColors.IsVisible) list.Add("customcolors");
+            Settings.OpenAtExit = _menuCompanions.WithPending(list); // closed only because the launcher is hidden: still open
         }
 
         public void ExitApp()

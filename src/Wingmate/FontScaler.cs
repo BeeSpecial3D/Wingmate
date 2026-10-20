@@ -11,6 +11,18 @@ namespace Wingmate
     {
         private sealed class Base { public double Size; }
         private static readonly ConditionalWeakTable<DependencyObject, Base> Bases = new();
+        private static readonly ConditionalWeakTable<FrameworkElement, Base> Widths = new();
+
+        /// <summary>Marks an element whose fixed Width should grow with the font size too (a window or a box sized for its text),
+        /// so bigger text never gets clipped. Uses the Width it has now as the base.</summary>
+        public static T Grow<T>(T el) where T : FrameworkElement
+        {
+            if (!Widths.TryGetValue(el, out _) && !double.IsNaN(el.Width)) Widths.Add(el, new Base { Size = el.Width });
+            return el;
+        }
+
+        /// <summary>Applies the current size to one element (and what is inside it) and hands it back; for controls made on the fly.</summary>
+        public static T Scaled<T>(T el) where T : DependencyObject { Apply(el); return el; }
 
         public static double Scale => App.Settings.FontScale is > 0.5 and < 2 ? App.Settings.FontScale : 1.0;
 
@@ -36,6 +48,7 @@ namespace Wingmate
                 }
                 if (b != null) d.SetValue(prop, b.Size * k);
             }
+            if (d is FrameworkElement fe && Widths.TryGetValue(fe, out var w)) fe.Width = System.Math.Round(w.Size * k);
             if (d is Visual || d is System.Windows.Media.Media3D.Visual3D)
             {
                 int n = VisualTreeHelper.GetChildrenCount(d);

@@ -255,7 +255,7 @@ namespace Wingmate
 
         private void Speak(IEnumerable<string> keys) { if (!S.Muted) Voice.Play(keys); }
 
-        private void Home_Click(object sender, RoutedEventArgs e) => App.Current.ShowLauncher();
+        private void Home_Click(object sender, RoutedEventArgs e) => App.Current.ToggleLauncherFromMenu();
 
 
         private void Close_Click(object sender, RoutedEventArgs e) => App.Current.CloseAbyss();

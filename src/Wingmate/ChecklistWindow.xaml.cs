@@ -250,7 +250,8 @@ namespace Wingmate
                 Background = Th.Br("inputBg"), BorderBrush = TitleText.Foreground,
                 BorderThickness = new Thickness(1), CaretBrush = Th.Br("caret"), Padding = new Thickness(2, 0, 2, 0), AcceptsReturn = false,
             };
-            bool finished = false;
+            bool finished = false, typed = false;
+            tb.TextChanged += (s, e) => typed = true;
             void Finish(bool escaped)
             {
                 if (finished) return;
@@ -261,7 +262,7 @@ namespace Wingmate
                 host.Children.Remove(tb);
                 TitleText.Visibility = Visibility.Visible;
                 EndEdit(); // saves
-                App.Current.CharacterRenamed();
+                App.Current.CharacterRenamed(entered: !escaped && typed);
             }
             BeginEdit(() => Finish(false)); // commits any other open edit first
             TitleText.Visibility = Visibility.Collapsed;
@@ -433,7 +434,7 @@ namespace Wingmate
             }
         }
 
-        private void Home_Click(object sender, RoutedEventArgs e) => App.Current.ShowLauncher();
+        private void Home_Click(object sender, RoutedEventArgs e) => App.Current.ToggleLauncherFromMenu();
 
         private void Close_Click(object sender, RoutedEventArgs e) => App.Current.CloseChecklist();
 
