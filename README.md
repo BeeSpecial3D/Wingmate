@@ -15,7 +15,11 @@ Daily and weekly lists that reset on their own, plus your own custom lists.
 <img src="docs/images/checklist.png" alt="Checklist with dailies and weeklies" width="360">
 
 ### Launcher
-Pick your region and character, and open or close the alerts and checklist windows. The **Menu** button on the alerts and checklist windows brings the launcher back. Wingmate remembers where you put the launcher and Settings, and if you close Wingmate with the launcher's **×**, the windows you had open come back where you left them next time.
+Pick your region and character, and open or close the alerts and checklist windows. The **Menu** button on the alerts and checklist windows brings the launcher back. Drag the launcher's edges or its corner grip to resize it. Wingmate remembers where you put the launcher and Settings (and the launcher's size), and if you close Wingmate with the launcher's **×**, the windows you had open come back where you left them next time.
+
+**First run:** the launcher asks for your character name first. Type it and press **Save** (or Enter); the Checklist unlocks once a name is saved. The alerts work right away.
+
+**Coming soon:** Character stats.
 
 <img src="docs/images/launcher.png" alt="Wingmate launcher" width="360">
 
@@ -55,7 +59,7 @@ Current (the default), Elyos, Asmodian, Abyss, Honey, Midnight and Light, each w
 </table>
 
 ### Updates itself
-New versions download quietly in the background and install the next time you start Wingmate.
+When a new version is out, Wingmate shows a small pop-up: **Update now** downloads it and restarts into the new version, **Later** closes the pop-up. You can still update anytime from the **Update available** link on the launcher or the tray menu. Updating never touches your lists or settings.
 
 **Wingmate never touches the game.** It doesn't automate anything, read game memory, or hook your keyboard or mouse. It is a separate window that sits on top of the game. The optional window lock hotkey uses the standard Windows hotkey API.
 

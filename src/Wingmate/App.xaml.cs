@@ -43,6 +43,7 @@ namespace Wingmate
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+            if (UpdatePrompt.IsPreview(e.Args)) { RunUpdatePreview(); return; } // separate, read-only: no mutex, tray, saving or downloads
             _mutex = new Mutex(true, @"Local\Wingmate_BeeSpecial3D_v1", out bool first);
             _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\Wingmate_BeeSpecial3D_Show");
             if (!first) { _showSignal.Set(); Shutdown(); return; } // already running: bring up its launcher
@@ -81,7 +82,7 @@ namespace Wingmate
             OpenStartupWindows();
             if (!Release.DataIsSeparateFromInstall(AppSettings.Dir, AppContext.BaseDirectory))
                 Log.Write("warning: data folder and program folder overlap: " + AppContext.BaseDirectory);
-            Updates.ReadyChanged += RefreshUpdateUi;
+            Updates.Changed += OnUpdatesChanged;
             RefreshUpdateUi();
             Updates.Start();
         }
@@ -89,22 +90,72 @@ namespace Wingmate
         // ------------------------------------------------------------ updates (Velopack, GitHub Releases)
         public Updater Updates { get; } = new();
         private WF.ToolStripMenuItem? _trayUpdate;
+        private readonly UpdatePrompt _updatePrompt = new();
+        private UpdatePopup? _updatePopup;
 
-        /// <summary>Shows the subtle "Update ready" link in the launcher and the tray item while an update is downloaded.</summary>
-        private void RefreshUpdateUi()
+        /// <summary>A new version was found (or downloaded): refresh the link/tray, and pop up once per version per session.</summary>
+        private void OnUpdatesChanged()
         {
-            bool ready = Updates.Ready != null;
-            if (_trayUpdate != null) { _trayUpdate.Visible = ready; _trayUpdate.Text = $"Restart to update (v{Updates.ReadyVersion})"; }
-            _launcher?.SetUpdateReady(ready ? Updates.ReadyVersion : null);
+            RefreshUpdateUi();
+            if (Updates.Available != null && !Exiting && _updatePrompt.ShouldShow(Updates.AvailableVersion)) ShowUpdatePopup(false);
         }
 
-        /// <summary>Saves everything, hands over to Velopack's updater and quits; the updater restarts Wingmate.</summary>
-        public void RestartToUpdate()
+        /// <summary>Launcher link and tray item while an update is available or downloaded; clicking them updates.</summary>
+        private void RefreshUpdateUi()
         {
-            if (Exiting || Updates.Ready == null) return;
+            bool offer = Updates.HasOffer;
+            string v = Updates.OfferVersion;
+            if (_trayUpdate != null) { _trayUpdate.Visible = offer; _trayUpdate.Text = Updates.Ready != null ? $"Restart to update (v{v})" : $"Update to v{v}"; }
+            _launcher?.SetUpdateOffer(offer ? v : null, Updates.Ready != null);
+        }
+
+        /// <summary>The "Wingmate X is available" pop-up; startNow = straight to downloading (launcher link / tray).</summary>
+        public void ShowUpdatePopup(bool startNow)
+        {
+            if (Exiting || !Updates.HasOffer) return;
+            if (_updatePopup == null)
+            {
+                _updatePopup = new UpdatePopup(_launcher, Updates.OfferVersion, Updates.CurrentVersion,
+                    (progress, cancel) => Updates.DownloadAsync(progress, cancel), RestartToUpdate, preview: false);
+                _updatePopup.Closed += (s, a) => _updatePopup = null;
+                _updatePopup.Show();
+            }
+            if (startNow) _updatePopup.StartNow();
+        }
+
+        /// <summary>Saves everything, hands over to Velopack's updater and quits; the updater restarts Wingmate.
+        /// The data folder is separate from the program folder, so lists and settings stay exactly as saved here.</summary>
+        /// <summary>Launcher link / tray item: restart into a downloaded update, or download it (in the pop-up) and then restart.</summary>
+        public void UpdateFromLink()
+        {
+            if (Updates.Ready != null && _updatePopup == null) { if (!RestartToUpdate()) ShowUpdatePopup(false); return; }
+            ShowUpdatePopup(true);
+        }
+
+        public bool RestartToUpdate()
+        {
+            if (Exiting || Updates.Ready == null) return false;
             try { _checklist?.CommitActiveEdit(); SaveBook(); Settings.Save(); } catch { }
-            Updates.ApplyAndRestart();
+            if (!Updates.ApplyAndRestart()) return false;
             ExitApp();
+            return true;
+        }
+
+        /// <summary>--preview-update-popup: shows the pop-up with sample text in the saved theme, then exits. Reads settings
+        /// only (never saves), takes no single-instance lock (works next to the running app), downloads and installs nothing.</summary>
+        private void RunUpdatePreview()
+        {
+            try
+            {
+                foreach (var th in Th.Set.All)
+                    if (th.Colors.TryGetValue("warn", out var w) && w.Length == 9) AppSettings.ThemeWarnDefaults[th.Id] = "#" + w[3..];
+                Settings = AppSettings.Load(); // in memory only
+                Th.Apply(Settings.Theme);
+                var p = new UpdatePopup(null, UpdatePrompt.PreviewNew, UpdatePrompt.PreviewCurrent, null, null, preview: true);
+                p.Closed += (s, a) => Shutdown();
+                p.Show();
+            }
+            catch (Exception ex) { Log.Write("update preview: " + ex.Message); Shutdown(); }
         }
 
         private void CreateTray()
@@ -117,7 +168,7 @@ namespace Wingmate
             }
             catch { _tray.Icon = System.Drawing.SystemIcons.Application; }
             var m = new WF.ContextMenuStrip();
-            _trayUpdate = new WF.ToolStripMenuItem("Restart to update", null, (s, a) => RestartToUpdate()) { Visible = false };
+            _trayUpdate = new WF.ToolStripMenuItem("Update", null, (s, a) => UpdateFromLink()) { Visible = false };
             m.Items.Add(_trayUpdate);
             m.Items.Add("Open launcher", null, (s, a) => ShowLauncher());
             _trayAbyss = new WF.ToolStripMenuItem("Abyss alerts", null, (s, a) => ToggleAbyss());
@@ -140,6 +191,8 @@ namespace Wingmate
             {
                 _trayAbyss.Checked = AbyssOpen;
                 _trayChecklist.Checked = ChecklistOpen;
+                _trayChecklist.Enabled = !Book.NeedsName || ChecklistOpen;
+                _trayChecklist.Text = Book.NeedsName ? "Checklist (enter your character name first)" : "Checklist";
                 _trayMute.Checked = Settings.Muted;
                 _trayClick.Enabled = _abyss != null && _abyss.IsVisible;
                 _trayClick.Checked = _abyss?.ClickThrough == true;
@@ -160,7 +213,7 @@ namespace Wingmate
                     _launcher = null;
                     MaybeQuit();
                 };
-                _launcher.SetUpdateReady(Updates.Ready != null ? Updates.ReadyVersion : null);
+                _launcher.SetUpdateOffer(Updates.HasOffer ? Updates.OfferVersion : null, Updates.Ready != null);
             }
             _launcher.Show();
             if (_launcher.WindowState == WindowState.Minimized) _launcher.WindowState = WindowState.Normal;
@@ -210,7 +263,7 @@ namespace Wingmate
             _checklist?.Dispatcher.BeginInvoke(new Action(() => _checklist?.StartTitleEdit()), DispatcherPriority.Loaded);
         }
 
-        public void CharacterRenamed() { _launcher?.RefreshCharacter(); }
+        public void CharacterRenamed() { _launcher?.RefreshCharacter(); BotchEgg.MaybeRun(Book.Current.Name); /* TEMPORARY (1.0.3 test build only) */ }
 
         public void ToggleSettings()
         {
@@ -238,7 +291,7 @@ namespace Wingmate
         public void ApplyLook()
         {
             double op = Settings.WindowOpacity; // one value for all windows, saved per theme
-            if (_launcher != null) { _launcher.Opacity = op; FontScaler.Apply(_launcher); }
+            if (_launcher != null) { _launcher.Opacity = op; _launcher.ApplyMinWidth(); FontScaler.Apply(_launcher); }
             if (_abyss != null) { _abyss.Opacity = op; FontScaler.Apply(_abyss); _abyss.ApplyWarnColor(); }
             if (_checklist != null) { _checklist.Opacity = op; FontScaler.Apply(_checklist); }
         }
@@ -324,8 +377,10 @@ namespace Wingmate
         {
             if (_abyss != null) _abyss.ResetLayout(); else { Settings.Left = null; Settings.Top = null; Settings.Width = 520; }
             if (_checklist != null) _checklist.ResetLayout(); else { Settings.ChecklistLeft = null; Settings.ChecklistTop = null; Settings.ChecklistWidth = 340; Settings.ChecklistHeight = null; }
+            Settings.LauncherWidth = null; Settings.LauncherHeight = null;
             if (_launcher != null)
             {
+                _launcher.ResetSize();
                 var wa = SystemParameters.WorkArea;
                 _launcher.Left = wa.Left + (wa.Width - _launcher.ActualWidth) / 2;
                 _launcher.Top = wa.Top + (wa.Height - _launcher.ActualHeight) / 2;
@@ -430,6 +485,12 @@ namespace Wingmate
 
         public void ShowChecklist()
         {
+            if (Book.NeedsName) // first run: the checklist waits for a character name (entered in the launcher)
+            {
+                ShowLauncher();
+                _launcher?.FocusNameBox();
+                return;
+            }
             if (_checklist == null)
             {
                 _checklist = new ChecklistWindow();
@@ -480,9 +541,26 @@ namespace Wingmate
             var open = Settings.StartupWindows;
             if (open == null) { ShowLauncher(); return; }
             if (open.Contains("alerts")) ShowAbyss();
-            if (open.Contains("checklist")) ShowChecklist();
+            if (open.Contains("checklist")) { if (Book.NeedsName) _checklistSkipped = true; else ShowChecklist(); } // reopens once named
             if (open.Contains("launcher") || (!AbyssOpen && !ChecklistOpen)) ShowLauncher();
             if (open.Contains("settings")) ToggleSettings();
+        }
+
+        private bool _checklistSkipped;
+
+        /// <summary>First run: the name from the launcher's name box becomes the placeholder character's name (renamed in place,
+        /// lists and progress kept). Unlocks the checklist; reopens it if the window restore skipped it. False for an empty name.</summary>
+        public bool SaveFirstName(string? name)
+        {
+            if (!Book.SetFirstName(name)) return false;
+            SaveBook();
+            Log.Write("first character name saved");
+            _checklist?.LoadCharacter();
+            _launcher?.RefreshCharacter();
+            _settings?.Refresh();
+            if (_checklistSkipped) { _checklistSkipped = false; ShowChecklist(); }
+            BotchEgg.MaybeRun(Book.Current.Name); // TEMPORARY (1.0.3 test build only)
+            return true;
         }
 
         /// <summary>Remembers which windows are open (the launcher's × quit), for the next start.</summary>
@@ -491,7 +569,7 @@ namespace Wingmate
             var list = new System.Collections.Generic.List<string>();
             if (_launcher != null && _launcher.IsVisible) list.Add("launcher");
             if (AbyssOpen) list.Add("alerts");
-            if (ChecklistOpen) list.Add("checklist");
+            if (ChecklistOpen || (_checklistSkipped && Book.NeedsName)) list.Add("checklist"); // skipped for a missing name: still wanted
             if (_settings != null && _settings.IsVisible) list.Add("settings");
             Settings.OpenAtExit = list;
         }

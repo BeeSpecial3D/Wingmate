@@ -283,11 +283,9 @@ namespace Wingmate
                 () => App.Current.ChecklistClickThrough != null, cg, "Locked: clicks pass through the checklist window to the game (only while it is showing)");
             BuildHotkeyRow();
             var og = Grid2();
-            Check("Auto-minimize launcher", () => S.LauncherAutoMinimize, on => { S.LauncherAutoMinimize = on; SaveS(); }, into: og,
-                tip: "Tuck the launcher into the tray after opening a window");
-            Small("Reset window positions", () => App.Current.ResetAllPositions(), og);
             Check("Ask before quitting", () => S.AskBeforeQuit, on => { S.AskBeforeQuit = on; SaveS(); }, into: og,
                 tip: "The launcher's \u00D7 asks before quitting Wingmate");
+            Small("Reset window positions", () => App.Current.ResetAllPositions(), og);
 
             Group("CHECKLIST");
             var cv = Grid2();

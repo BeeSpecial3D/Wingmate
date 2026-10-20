@@ -53,6 +53,35 @@ namespace Wingmate.Core
             return b;
         }
 
+        /// <summary>Names that are only placeholders (the built-in default and the old sample name), compared trimmed and
+        /// case-insensitively.</summary>
+        public static readonly string[] PlaceholderNames = { DefaultName, "My Character Name", "Your character name", "Enter your character name" };
+
+        public static bool IsPlaceholderName(string? name)
+        {
+            var n = (name ?? "").Trim();
+            return n.Length == 0 || PlaceholderNames.Any(p => string.Equals(p, n, StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>First run: true while the only character still has a placeholder name. Anyone with a real name, or with
+        /// more than one character, never sees the name prompt. An unreadable checklist.json (read-only) never asks either,
+        /// because the name could not be saved.</summary>
+        [JsonIgnore] public bool NeedsName => !ReadOnly && Characters.Count == 1 && IsPlaceholderName(Characters[0].Name);
+
+        /// <summary>Saves the first name: renames the placeholder character in place (same id, lists and progress). Returns
+        /// false (and changes nothing) for an empty or placeholder name, or when no name is needed.</summary>
+        public bool SetFirstName(string? name)
+        {
+            var n = (name ?? "").Trim();
+            if (!NeedsName || IsPlaceholderName(n)) return false;
+            var c = Characters[0];
+            c.Name = n.Length > MaxNameLength ? n[..MaxNameLength].TrimEnd() : n;
+            CurrentId = c.Id;
+            return true;
+        }
+
+        public const int MaxNameLength = 40;
+
         /// <summary>Next character, looping to the first after the last. Returns the new current one.</summary>
         public ChecklistState Next()
         {

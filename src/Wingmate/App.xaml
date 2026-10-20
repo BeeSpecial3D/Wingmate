@@ -108,6 +108,27 @@
         </Setter.Value>
       </Setter>
     </Style>
+    <!-- Launcher placeholder for a future window: BigButton look, greyed out, disabled, no hover (tooltip still shows) -->
+    <Style x:Key="SoonButton" TargetType="Button">
+      <Setter Property="Foreground" Value="{DynamicResource Th.muted}"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Cursor" Value="Arrow"/>
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="IsEnabled" Value="False"/>
+      <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+      <Setter Property="Margin" Value="0,0,0,6"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Background="{DynamicResource Th.buttonBg}" BorderBrush="{DynamicResource Th.buttonBorder}" BorderThickness="1" CornerRadius="6" Padding="12,7" Opacity="0.6">
+              <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
     <Style x:Key="LinkButton" TargetType="Button">
       <Setter Property="Foreground" Value="{DynamicResource Th.link}"/>
       <Setter Property="Cursor" Value="Hand"/>

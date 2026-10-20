@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using Velopack;
@@ -7,19 +8,28 @@ using Wingmate.Core;
 
 namespace Wingmate
 {
-    /// <summary>Background updates from GitHub Releases (public, no token). Checks shortly after start and every 6 h,
-    /// downloads quietly, then offers "Restart to update"; otherwise Velopack applies it on the next start.
-    /// Only active in the installed app (the loose test exe never updates itself).</summary>
+    /// <summary>Updates from GitHub Releases (public, no token). Checks shortly after start and every 6 h. A new version is
+    /// only announced (<see cref="Available"/>); nothing is downloaded until the user picks "Update now" (pop-up, launcher
+    /// link or tray). Only active in the installed app (the loose test exe never updates itself). Updating only replaces
+    /// the program folder; the data folder (lists, settings) is separate and never touched.</summary>
     public sealed class Updater
     {
         private readonly UpdateManager? _mgr;
         private readonly DispatcherTimer _timer = new();
-        private bool _busy;
+        private bool _checking;
 
+        /// <summary>A newer version found online, not downloaded yet.</summary>
+        public UpdateInfo? Available { get; private set; }
+        public string AvailableVersion => Available?.TargetFullRelease?.Version?.ToString() ?? "";
         /// <summary>The downloaded update waiting for a restart, if any.</summary>
         public VelopackAsset? Ready { get; private set; }
         public string ReadyVersion => Ready?.Version?.ToString() ?? "";
-        public event Action? ReadyChanged;
+        /// <summary>Version for the launcher/tray: the downloaded one, else the available one.</summary>
+        public string OfferVersion => Ready != null ? ReadyVersion : AvailableVersion;
+        public bool HasOffer => Ready != null || Available != null;
+        public bool Downloading { get; private set; }
+        /// <summary>Raised (on the UI thread) when <see cref="Available"/> or <see cref="Ready"/> changes.</summary>
+        public event Action? Changed;
 
         public Updater()
         {
@@ -34,6 +44,17 @@ namespace Wingmate
 
         public bool Enabled => _mgr != null;
 
+        /// <summary>The running version ("1.0.2"), from Velopack when installed, else the exe's own version.</summary>
+        public string CurrentVersion
+        {
+            get
+            {
+                try { if (_mgr?.CurrentVersion is { } v) return UpdatePrompt.Clean(v.ToString()); } catch { }
+                var a = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+                return a == null ? "" : $"{a.Major}.{a.Minor}.{a.Build}";
+            }
+        }
+
         public void Start()
         {
             if (_mgr == null) return;
@@ -42,30 +63,54 @@ namespace Wingmate
             _timer.Start();
         }
 
+        /// <summary>Looks for a newer version; never downloads.</summary>
         public async Task CheckAsync()
         {
-            if (_mgr == null || _busy) return;
-            _busy = true;
+            if (_mgr == null || _checking || Downloading) return;
+            _checking = true;
             try
             {
                 var info = await _mgr.CheckForUpdatesAsync().ConfigureAwait(true);
-                if (info == null) return;
-                if (Ready != null && Ready.Version == info.TargetFullRelease.Version) return;
-                await _mgr.DownloadUpdatesAsync(info).ConfigureAwait(true);
-                Ready = info.TargetFullRelease;
-                Log.Write("update downloaded: " + ReadyVersion);
-                ReadyChanged?.Invoke();
+                if (info?.TargetFullRelease == null) return;
+                if (Ready != null && Ready.Version == info.TargetFullRelease.Version) return; // already downloaded
+                if (Available?.TargetFullRelease?.Version == info.TargetFullRelease.Version) return; // already known
+                Available = info;
+                Log.Write("update available: " + AvailableVersion);
+                Changed?.Invoke();
             }
             catch (Exception ex) { Log.Write("update check: " + ex.Message); } // offline, rate limited, no release yet...
-            finally { _busy = false; }
+            finally { _checking = false; }
+        }
+
+        /// <summary>Downloads the available update (progress 0-100 on the UI thread). Returns true when it is ready to apply.
+        /// Throws on network errors so the caller can offer a retry.</summary>
+        public async Task<bool> DownloadAsync(Action<int>? progress, CancellationToken cancel = default)
+        {
+            if (Ready != null) return true;
+            if (_mgr == null || Available == null) return false;
+            if (Downloading) return false;
+            Downloading = true;
+            var ui = Dispatcher.CurrentDispatcher;
+            try
+            {
+                var info = Available;
+                await _mgr.DownloadUpdatesAsync(info, p => ui.BeginInvoke(new Action(() => progress?.Invoke(p))), cancel).ConfigureAwait(true);
+                Ready = info.TargetFullRelease;
+                Available = null;
+                Log.Write("update downloaded: " + ReadyVersion);
+                Changed?.Invoke();
+                return true;
+            }
+            catch (Exception ex) { Log.Write("update download: " + ex.Message); throw; }
+            finally { Downloading = false; }
         }
 
         /// <summary>Applies the downloaded update and restarts (the caller saves everything first).</summary>
-        public void ApplyAndRestart()
+        public bool ApplyAndRestart()
         {
-            if (_mgr == null || Ready == null) return;
-            try { _mgr.WaitExitThenApplyUpdates(Ready, silent: true, restart: true); }
-            catch (Exception ex) { Log.Write("update apply: " + ex.Message); }
+            if (_mgr == null || Ready == null) return false;
+            try { _mgr.WaitExitThenApplyUpdates(Ready, silent: true, restart: true); return true; }
+            catch (Exception ex) { Log.Write("update apply: " + ex.Message); return false; }
         }
     }
 }

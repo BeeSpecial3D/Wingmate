@@ -30,27 +30,88 @@ namespace Wingmate
                 rb.Checked += (s, e) => { App.Settings.Region = (string)((RadioButton)s).Tag; App.Current.RegionChanged(); };
                 RegionPanel.Children.Add(rb);
             }
+            ApplyMinWidth();
+            RestoreSize();
             WindowSnap.TryRestore(this, App.Settings.LauncherLeft, App.Settings.LauncherTop); // else centred (first run)
             Panel.MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) { try { DragMove(); } catch { } WindowSnap.Clamp(this); SavePosition(); } };
             WindowSnap.Attach(this, SavePosition);
+            EdgeRight.DragDelta += (s, e) => ResizeBy(e.HorizontalChange, 0);
+            EdgeBottom.DragDelta += (s, e) => ResizeBy(0, e.VerticalChange);
+            ResizeGrip.DragDelta += (s, e) => ResizeBy(e.HorizontalChange, e.VerticalChange);
+            foreach (var t in new[] { EdgeRight, EdgeBottom, ResizeGrip }) t.DragCompleted += (s, e) => { WindowSnap.Clamp(this, true); SavePosition(); };
+            LayoutUpdated += (s, e) => KeepMinHeight();
             Loaded += (s, e) => FontScaler.Apply(this);
             Opacity = App.Settings.WindowOpacity;
             Panel.ContextMenuOpening += (s, e) => BuildMenu();
             RefreshState();
             SyncFromSettings();
             RefreshCharacter();
+            Loaded += (s, e) => { if (NamePrompt.Visibility == Visibility.Visible) Dispatcher.BeginInvoke(new Action(() => NameBox.Focus()), System.Windows.Threading.DispatcherPriority.Input); };
             // Alt+F4 / taskbar close = the × button (ask, then quit everything); the app's own shutdown passes through
             Closing += (s, e) => { if (App.Current.Exiting) return; e.Cancel = true; Dispatcher.BeginInvoke(new Action(() => App.Current.RequestQuit(this))); };
         }
 
-        /// <summary>Remembers where the launcher is, so it reopens there (only saves when it actually moved).</summary>
+        /// <summary>Remembers where the launcher is and its size, so it reopens that way (only saves when something changed).
+        /// Height is only saved once the user has made it taller than its content (else it keeps fitting the content).</summary>
         private void SavePosition()
         {
             if (double.IsNaN(Left) || double.IsNaN(Top) || WindowState != WindowState.Normal) return;
+            var s = App.Settings;
             double l = Math.Round(Left), t = Math.Round(Top);
-            if (App.Settings.LauncherLeft == l && App.Settings.LauncherTop == t) return;
-            App.Settings.LauncherLeft = l; App.Settings.LauncherTop = t;
-            App.Settings.Save();
+            double? w = ActualWidth > 0 ? Math.Round(ActualWidth) : s.LauncherWidth;
+            double? h = SizeToContent == SizeToContent.Manual && ActualHeight > 0 ? Math.Round(ActualHeight) : null;
+            if (s.LauncherLeft == l && s.LauncherTop == t && s.LauncherWidth == w && s.LauncherHeight == h) return;
+            s.LauncherLeft = l; s.LauncherTop = t; s.LauncherWidth = w; s.LauncherHeight = h;
+            s.Save();
+        }
+
+        public const double DefaultWidth = 340;
+
+        /// <summary>Minimum width for the text size: 340 up to Medium, wider for Large / X-Large so the header, footer and
+        /// window buttons never clip (measured: X-Large needs about 386).</summary>
+        public static double MinWidthFor(double fontScale) => Math.Ceiling(DefaultWidth + Math.Max(0, fontScale - 1) * 260);
+
+        public void ApplyMinWidth() => MinWidth = MinWidthFor(FontScaler.Scale);
+
+        /// <summary>Saved size, kept within the screen (never smaller than the minimum; height never below the content).</summary>
+        private void RestoreSize()
+        {
+            var s = App.Settings;
+            if (s.LauncherWidth is double w && double.IsFinite(w))
+                Width = Math.Clamp(w, MinWidth, Math.Max(MinWidth, SystemParameters.VirtualScreenWidth));
+            if (s.LauncherHeight is double h && double.IsFinite(h) && h > 0)
+            {
+                SizeToContent = SizeToContent.Manual;
+                Height = Math.Min(h, SystemParameters.WorkArea.Height); // KeepMinHeight raises it to the content if needed
+            }
+        }
+
+        private void ResizeBy(double dx, double dy)
+        {
+            if (Math.Abs(dx) > 0.1) Width = Math.Clamp(ActualWidth + dx, MinWidth, Math.Max(MinWidth, SystemParameters.VirtualScreenWidth));
+            if (Math.Abs(dy) > 0.1)
+            {
+                if (SizeToContent != SizeToContent.Manual) { Height = ActualHeight; SizeToContent = SizeToContent.Manual; }
+                Height = Math.Clamp(ActualHeight + dy, MinHeight, Math.Max(MinHeight, SystemParameters.VirtualScreenHeight));
+            }
+        }
+
+        /// <summary>The launcher can't be shorter than its content (text size, name box, update link): extra height is
+        /// empty space at the bottom, never clipped content.</summary>
+        private void KeepMinHeight()
+        {
+            if (Body.DesiredSize.Height <= 0) return;
+            var pad = Panel.Padding; var bd = Panel.BorderThickness;
+            double need = Math.Ceiling(Body.DesiredSize.Height + pad.Top + pad.Bottom + bd.Top + bd.Bottom);
+            if (Math.Abs(MinHeight - need) > 0.5) MinHeight = need;
+        }
+
+        /// <summary>"Reset window positions": default width, height fits the content again.</summary>
+        public void ResetSize()
+        {
+            Width = DefaultWidth;
+            SizeToContent = SizeToContent.Height;
+            UpdateLayout();
         }
 
         private void BuildMenu()
@@ -65,15 +126,11 @@ namespace Wingmate
                 op.Items.Add(mi);
             }
             Menu.Items.Add(op);
-            var am = new MenuItem { Header = "Auto-minimize after opening", IsChecked = App.Settings.LauncherAutoMinimize };
-            am.Click += (s, e) => { App.Settings.LauncherAutoMinimize = !App.Settings.LauncherAutoMinimize; App.Settings.Save(); };
-            Menu.Items.Add(am);
         }
 
         /// <summary>Keeps the region pills in step with the setting (changed from Settings or the alerts menu).</summary>
         public void SyncFromSettings()
         {
-            AutoMinBox.IsChecked = App.Settings.LauncherAutoMinimize;
             foreach (var rb in RegionPanel.Children.OfType<RadioButton>())
             {
                 bool on = (string)rb.Tag == App.Settings.Region;
@@ -81,17 +138,43 @@ namespace Wingmate
             }
         }
 
-        private void AutoMin_Click(object sender, RoutedEventArgs e)
-        {
-            App.Settings.LauncherAutoMinimize = AutoMinBox.IsChecked == true;
-            App.Settings.Save();
-        }
-
         // ------------------------------------------------------------ characters
         public void RefreshCharacter()
         {
             var c = App.Book.Current;
             CharName.Text = c.Name;
+            bool ask = App.Book.NeedsName;
+            NamePrompt.Visibility = ask ? Visibility.Visible : Visibility.Collapsed;
+            CharRow.Visibility = ask ? Visibility.Collapsed : Visibility.Visible;
+            RefreshState();
+        }
+
+        /// <summary>Puts the cursor in the name box (e.g. after trying to open the checklist without a name).</summary>
+        public void FocusNameBox()
+        {
+            if (NamePrompt.Visibility != Visibility.Visible) return;
+            Activate();
+            NameBox.Focus();
+        }
+
+        private void NameBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            NameHint.Visibility = NameBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+            NameSave.IsEnabled = !Core.ChecklistBook.IsPlaceholderName(NameBox.Text);
+        }
+
+        private void NameBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter && e.Key != Key.Return) return;
+            e.Handled = true;
+            SaveName();
+        }
+
+        private void NameSave_Click(object sender, RoutedEventArgs e) => SaveName();
+
+        private void SaveName()
+        {
+            if (!App.Current.SaveFirstName(NameBox.Text)) { NameBox.Focus(); NameBox.SelectAll(); }
         }
 
         private void CharName_Click(object sender, RoutedEventArgs e)
@@ -127,21 +210,23 @@ namespace Wingmate
         /// <summary>Shows whether the alerts window is open (called whenever it opens or hides).</summary>
         public void RefreshState()
         {
-            bool a = App.Current.AbyssOpen, c = App.Current.ChecklistOpen, both = a && c;
+            bool a = App.Current.AbyssOpen, c = App.Current.ChecklistOpen;
             BtnAbyss.Tag = a ? "on" : null;
             AbyssBadgeText.Text = a ? "OPEN" : "CLOSED";
             AbyssBadgeText.Foreground = a ? TextOn : TextOff;
             AbyssBadge.Background = a ? BadgeOn : BadgeOff;
             AbyssSub.Text = a ? "Showing now. Click to close it." : "Countdown overlay with voice warnings";
             BtnAbyss.ToolTip = a ? "Close the Abyss alerts" : "Open the Abyss alerts";
+            bool locked = App.Book.NeedsName;
+            BtnChecklist.IsEnabled = !locked;
+            BtnChecklist.Opacity = locked ? 0.45 : 1.0;
             BtnChecklist.Tag = c ? "on" : null;
             ChecklistBadgeText.Text = c ? "OPEN" : "CLOSED";
             ChecklistBadgeText.Foreground = c ? TextOn : TextOff;
             ChecklistBadge.Background = c ? BadgeOn : BadgeOff;
             ChecklistSub.Text = c ? "Showing now. Click to close it." : "Dailies, weeklies and your own lists";
             BtnChecklist.ToolTip = c ? "Close the checklist" : "Open the checklist";
-            BtnBoth.Tag = both ? "on" : null;
-            BothText.Text = both ? "Close both" : "Open both";
+            if (locked) { ChecklistSub.Text = "Enter your character name first"; BtnChecklist.ToolTip = "Enter your character name first (above)"; }
         }
 
         private void ShowStatus(string text) { Status.Text = text; Status.Visibility = Visibility.Visible; }
@@ -149,25 +234,13 @@ namespace Wingmate
         private void BtnAbyss_Click(object sender, RoutedEventArgs e)
         {
             if (App.Current.AbyssOpen) App.Current.HideAbyss();
-            else { App.Current.ShowAbyss(); AutoHide(); }
+            else App.Current.ShowAbyss(); // the launcher stays open (no auto-minimize since 1.0.3)
         }
 
         private void BtnChecklist_Click(object sender, RoutedEventArgs e)
         {
             if (App.Current.ChecklistOpen) App.Current.HideChecklist();
-            else { App.Current.ShowChecklist(); AutoHide(); }
-        }
-
-        private void BtnBoth_Click(object sender, RoutedEventArgs e)
-        {
-            if (App.Current.AbyssOpen && App.Current.ChecklistOpen) { App.Current.HideAbyss(); App.Current.HideChecklist(); }
-            else { App.Current.ShowAbyss(); App.Current.ShowChecklist(); AutoHide(); }
-        }
-
-        /// <summary>After opening a window, tuck the launcher into the tray (it still counts as open).</summary>
-        private void AutoHide()
-        {
-            if (App.Settings.LauncherAutoMinimize) Hide();
+            else App.Current.ShowChecklist();
         }
 
         /// <summary>× quits Wingmate (after the confirm, unless "Don't ask again" was ticked).</summary>
@@ -175,13 +248,16 @@ namespace Wingmate
 
         private void Support_Click(object sender, RoutedEventArgs e) => App.OpenSupport();
 
-        private void Update_Click(object sender, RoutedEventArgs e) => App.Current.RestartToUpdate();
+        private void Update_Click(object sender, RoutedEventArgs e) => App.Current.UpdateFromLink();
 
-        /// <summary>Shows "Update ready · Restart" while a downloaded update waits (null hides it).</summary>
-        public void SetUpdateReady(string? version)
+        /// <summary>"Update available · v1.0.3" (click downloads and installs) or "Update ready · Restart" (downloaded); null hides it.</summary>
+        public void SetUpdateOffer(string? version, bool downloaded)
         {
             UpdateLink.Visibility = version == null ? Visibility.Collapsed : Visibility.Visible;
-            UpdateLink.ToolTip = version == null ? null : $"Wingmate {version} is downloaded. Restart now to update, or it installs the next time Wingmate starts.";
+            UpdateLink.Content = downloaded ? "Update ready \u00B7 Restart" : $"Update available \u00B7 v{version}";
+            UpdateLink.ToolTip = version == null ? null : downloaded
+                ? $"Wingmate {version} is downloaded. Restart now to update, or it installs the next time Wingmate starts."
+                : $"Wingmate {version} is available. Click to download and install it (Wingmate restarts; your lists and settings stay).";
         }
     }
 }

@@ -59,6 +59,8 @@ namespace Wingmate.Core
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? Opacity { get; set; }
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? LauncherOpacity { get; set; }
         public int SettingsVersion { get; set; }
+        /// <summary>Old "Auto-minimize after opening" choice. Ignored since 1.0.3 (the launcher never auto-minimizes); kept
+        /// only so the saved value round-trips unchanged and an older Wingmate still reads its own setting.</summary>
         public bool LauncherAutoMinimize { get; set; } = true;
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? ChecklistOpacity { get; set; }
         /// <summary>One opacity for all windows, saved per theme (theme id -> 0.4..1). Missing = <see cref="DefaultOpacity"/>.</summary>
@@ -115,6 +117,9 @@ namespace Wingmate.Core
         /// <summary>Last launcher position; null = centred (first run).</summary>
         public double? LauncherLeft { get; set; }
         public double? LauncherTop { get; set; }
+        /// <summary>Launcher size (null = default width / height fits the content). Added in 1.0.3; older files have none.</summary>
+        public double? LauncherWidth { get; set; }
+        public double? LauncherHeight { get; set; }
         /// <summary>Last Settings window position; null = next to the launcher.</summary>
         public double? SettingsLeft { get; set; }
         public double? SettingsTop { get; set; }

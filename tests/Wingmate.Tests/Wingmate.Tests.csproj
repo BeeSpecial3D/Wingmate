@@ -15,6 +15,7 @@
     <Compile Include="..\..\src\Wingmate\Core\Feedback.cs" />
     <Compile Include="..\..\src\Wingmate\Core\Release.cs" />
     <Compile Include="..\..\src\Wingmate\Core\CustomTheme.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\UpdatePrompt.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
