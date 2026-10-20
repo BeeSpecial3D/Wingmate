@@ -263,7 +263,7 @@ namespace Wingmate
             _checklist?.Dispatcher.BeginInvoke(new Action(() => _checklist?.StartTitleEdit()), DispatcherPriority.Loaded);
         }
 
-        public void CharacterRenamed() { _launcher?.RefreshCharacter(); BotchEgg.MaybeRun(Book.Current.Name); /* TEMPORARY (1.0.3 test build only) */ }
+        public void CharacterRenamed() { _launcher?.RefreshCharacter(); }
 
         public void ToggleSettings()
         {
@@ -559,7 +559,6 @@ namespace Wingmate
             _launcher?.RefreshCharacter();
             _settings?.Refresh();
             if (_checklistSkipped) { _checklistSkipped = false; ShowChecklist(); }
-            BotchEgg.MaybeRun(Book.Current.Name); // TEMPORARY (1.0.3 test build only)
             return true;
         }
 
