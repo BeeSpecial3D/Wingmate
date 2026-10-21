@@ -19,7 +19,7 @@ namespace Wingmate
         {
             InitializeComponent();
             var v = Assembly.GetExecutingAssembly().GetName().Version;
-            VersionText.Text = $"v{v?.Major}.{v?.Minor}.{v?.Build} · schedule {App.Schedule.Current.Version}";
+            App.SetVersionLink(VersionText, $"v{v?.Major}.{v?.Minor}.{v?.Build}", suffix: $" · schedule {App.Schedule.Current.Version}");
             foreach (var r in App.Schedule.Current.Regions)
             {
                 var rb = new RadioButton
@@ -255,11 +255,11 @@ namespace Wingmate
             m.Items.Add(Mi("Add character", () => App.Current.AddCharacter()));
             m.Items.Add(Mi("Rename\u2026", () => App.Current.RenameCharacter()));
             var cls = new MenuItem { Header = "Class" };
-            var curClass = Core.CharacterClasses.Normalize(cur.Class);
-            foreach (var name in Core.CharacterClasses.Names)
+            foreach (var entry in Core.CharacterClasses.MenuEntries(cur.Class))
             {
-                var n = name;
-                cls.Items.Add(Mi(n, () => App.Current.SetCharacterClass(n), n == curClass));
+                var v = entry.Value;
+                if (entry.SeparatorBefore) cls.Items.Add(new Separator { Style = (Style)FindResource("DarkSep") });
+                cls.Items.Add(Mi(entry.Label, () => App.Current.SetCharacterClass(v), entry.IsChecked));
             }
             m.Items.Add(cls);
             if (App.Book.Characters.Count > 1)

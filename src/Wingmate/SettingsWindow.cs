@@ -19,7 +19,13 @@ namespace Wingmate
 
         private bool _sync;
         private readonly List<Action> _refreshers = new();
-        private readonly StackPanel _body = new();
+        private StackPanel _body = new(); // the tab page being built (see Page)
+        private readonly Grid _pages = new();
+        private readonly WrapPanel _tabs = new() { Margin = new Thickness(0, 2, 0, 4) };
+        private readonly Dictionary<string, (StackPanel Page, RadioButton Tab)> _tabPages = new();
+        /// <summary>Settings reopens on the tab it was last on (for this run of Wingmate).</summary>
+        private static string _lastTab = "General";
+        public static readonly string[] TabNames = { "General", "Appearance", "Alerts", "Checklist", "About" };
 
         public SettingsWindow(Window? near)
         {
@@ -45,18 +51,20 @@ namespace Wingmate
             DockPanel.SetDock(head, Dock.Top); root.Children.Add(head);
             var sep = new Border { Height = 1, Margin = new Thickness(0, 0, 0, 4) }.Ref(Border.BackgroundProperty, "divider");
             DockPanel.SetDock(sep, Dock.Top); root.Children.Add(sep);
+            DockPanel.SetDock(_tabs, Dock.Top); root.Children.Add(_tabs);
             var feedback = new Button { Content = "Send feedback", Style = Res<Style>("LinkButton"), FontSize = 11, Focusable = false, Cursor = Cursors.Hand,
                 HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 6, 0, 0), ToolTip = "Report a problem or suggest something (opens GitHub in your browser)" };
             feedback.Click += (s, e) => App.OpenFeedback();
             var av = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
             var version = new TextBlock { Text = $"Wingmate v{av?.Major}.{av?.Minor}.{av?.Build}", FontSize = 10, VerticalAlignment = VerticalAlignment.Bottom,
                 HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 6, 6, 0) }.Ref(TextBlock.ForegroundProperty, "versionText");
+            App.SetVersionLink(version, $"v{av?.Major}.{av?.Minor}.{av?.Build}", prefix: "Wingmate ");
             var foot = new DockPanel();
             DockPanel.SetDock(feedback, Dock.Left); foot.Children.Add(feedback); foot.Children.Add(version);
             DockPanel.SetDock(foot, Dock.Bottom); root.Children.Add(foot);
             root.Children.Add(new ScrollViewer
             {
-                Content = _body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Focusable = false,
+                Content = _pages, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Focusable = false,
                 MaxHeight = SystemParameters.WorkArea.Height * 0.8, Padding = new Thickness(0, 0, 6, 0),
             });
             Content = new Border
@@ -66,6 +74,7 @@ namespace Wingmate
             }.Ref(Border.BackgroundProperty, "menuBg").Ref(Border.BorderBrushProperty, "panelBorder");
             _sync = true; // building sets slider ranges, which must not write settings
             try { Build(); } finally { _sync = false; }
+            ShowTab(_lastTab);
 
             MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) { try { DragMove(); } catch { } WindowSnap.Clamp(this); SavePosition(); } };
             WindowSnap.Attach(this, SavePosition);
@@ -77,6 +86,33 @@ namespace Wingmate
         }
 
         private static T Res<T>(string key) => (T)Application.Current.FindResource(key);
+
+        /// <summary>Starts a tab: what is added next goes on its page. The tab strip sits at the top under the title.</summary>
+        private void Page(string name)
+        {
+            var page = new StackPanel { Visibility = Visibility.Collapsed };
+            _pages.Children.Add(page);
+            var tab = new RadioButton { Content = name, GroupName = "settings-tab", Style = Res<Style>("Pill"), Margin = new Thickness(0, 0, 5, 4), Focusable = false };
+            tab.Checked += (s, e) => ShowTab(name);
+            _tabs.Children.Add(tab);
+            _tabPages[name] = (page, tab);
+            _body = page;
+        }
+
+        /// <summary>Shows one tab (unknown name: General). The window keeps its width and grows or shrinks to the page.</summary>
+        public void ShowTab(string name)
+        {
+            if (!_tabPages.ContainsKey(name)) name = TabNames[0];
+            _lastTab = name;
+            foreach (var (n, (page, tab)) in _tabPages)
+            {
+                page.Visibility = n == name ? Visibility.Visible : Visibility.Collapsed;
+                if (n == name && tab.IsChecked != true) tab.IsChecked = true;
+            }
+            if (IsLoaded) FontScaler.Apply(_tabPages[name].Page);
+        }
+
+        public string CurrentTab => _lastTab;
 
         /// <summary>Pulls every control's state from the settings (called after any save anywhere).</summary>
         public void Refresh()
@@ -227,13 +263,8 @@ namespace Wingmate
         // ------------------------------------------------------------ content
         private void Build()
         {
-            Group("TEXT");
-            Pills(AppSettings.FontScaleNames.Select((n, i) => (n, AppSettings.FontScales[i])),
-                v => Math.Abs(S.FontScale - v) < 0.01, v => App.Current.SetFontScale(v), v => 11 * v);
-
-            Group("THEME");
-            BuildThemePills();
-
+            // ---------------------------------------------------------------- General
+            Page("General");
             Group("VOICE");
             var test = new Button { Content = "Test", Style = Res<Style>("DialogButton"), MinWidth = 0, Margin = new Thickness(6, 0, 0, 0),
                 Focusable = false, FontWeight = FontWeights.Normal, ToolTip = "Play a short clip at this volume", Padding = new Thickness(0) };
@@ -241,6 +272,36 @@ namespace Wingmate
             SliderRow("Volume", 0, 100, () => Math.Round(S.Volume * 100), v => { S.Volume = Math.Clamp(v, 0, 100) / 100.0; SaveS(); }, test);
             Check("Mute voice", () => S.Muted, on => App.Current.SetMuted(on)).HorizontalAlignment = HorizontalAlignment.Left;
 
+            Group("WINDOWS");
+            var cg = Grid2();
+            Check("Alert window lock", () => App.Current.AbyssClickThrough == true, on => App.Current.SetAbyssClickThrough(on),
+                () => App.Current.AbyssClickThrough != null, cg, "Locked: clicks pass through the alerts window to the game (only while it is showing)");
+            Check("Checklist window lock", () => App.Current.ChecklistClickThrough == true, on => App.Current.SetChecklistClickThrough(on),
+                () => App.Current.ChecklistClickThrough != null, cg, "Locked: clicks pass through the checklist window to the game (only while it is showing)");
+            BuildHotkeyRow();
+            var og = Grid2();
+            Check("Ask before quitting", () => S.AskBeforeQuit, on => { S.AskBeforeQuit = on; SaveS(); }, into: og,
+                tip: "The launcher's \u00D7 asks before quitting Wingmate");
+            Small("Reset window positions", () => App.Current.ResetAllPositions(), og);
+
+            // ---------------------------------------------------------------- Appearance
+            Page("Appearance");
+            Group("TEXT");
+            Pills(AppSettings.FontScaleNames.Select((n, i) => (n, AppSettings.FontScales[i])),
+                v => Math.Abs(S.FontScale - v) < 0.01, v => App.Current.SetFontScale(v), v => 11 * v);
+
+            Group("THEME");
+            BuildThemePills();
+
+            Group("OPACITY");
+            // one opacity for the launcher, alerts and checklist; each theme remembers its own (switching themes applies it)
+            SliderRow("Opacity", 40, 100, () => Math.Round(S.WindowOpacity * 100), v => App.Current.SetOpacity(Math.Clamp(v, 40, 100) / 100.0),
+                tip: "All windows. Each theme keeps its own opacity.");
+            Add(new TextBlock { Text = "The launcher, alerts and checklist windows. Settings always stays fully visible.", FontSize = 11,
+                TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) }.Ref(TextBlock.ForegroundProperty, "muted"));
+
+            // ---------------------------------------------------------------- Alerts
+            Page("Alerts");
             Group("ABYSS ALERTS");
             Pills(App.Schedule.Current.Regions.Select(r => (r.Name, r.Id)), id => S.Region == id, id => { S.Region = id; App.Current.RegionChanged(); });
             var wg = Grid2();
@@ -273,22 +334,10 @@ namespace Wingmate
             }
             // the warning colour is edited in the Custom colors window since 1.0.5 (saved choices keep working on every theme)
             Small("Test alert", () => App.Current.TestAlert(), Grid2()).ToolTip = "Show a sample alert in the current warning color";
+            BuildCustomAlerts();
 
-            Group("WINDOWS");
-            // one opacity for the launcher, alerts and checklist; each theme remembers its own (switching themes applies it)
-            SliderRow("Opacity", 40, 100, () => Math.Round(S.WindowOpacity * 100), v => App.Current.SetOpacity(Math.Clamp(v, 40, 100) / 100.0),
-                tip: "All windows. Each theme keeps its own opacity.");
-            var cg = Grid2();
-            Check("Alert window lock", () => App.Current.AbyssClickThrough == true, on => App.Current.SetAbyssClickThrough(on),
-                () => App.Current.AbyssClickThrough != null, cg, "Locked: clicks pass through the alerts window to the game (only while it is showing)");
-            Check("Checklist window lock", () => App.Current.ChecklistClickThrough == true, on => App.Current.SetChecklistClickThrough(on),
-                () => App.Current.ChecklistClickThrough != null, cg, "Locked: clicks pass through the checklist window to the game (only while it is showing)");
-            BuildHotkeyRow();
-            var og = Grid2();
-            Check("Ask before quitting", () => S.AskBeforeQuit, on => { S.AskBeforeQuit = on; SaveS(); }, into: og,
-                tip: "The launcher's \u00D7 asks before quitting Wingmate");
-            Small("Reset window positions", () => App.Current.ResetAllPositions(), og);
-
+            // ---------------------------------------------------------------- Checklist
+            Page("Checklist");
             Group("CHECKLIST");
             var cv = Grid2();
             Check("Celebration voice", () => S.CelebrationVoice, on => { S.CelebrationVoice = on; SaveS(); }, into: cv);
@@ -297,6 +346,75 @@ namespace Wingmate
             Small("Show hidden", () => { App.Current.ShowHiddenSections(); Refresh(); }, lg,
                 () => App.Current.HiddenSectionCount > 0, () => $"Show hidden ({App.Current.HiddenSectionCount})");
             Small("Reset all lists\u2026", () => { App.Current.ResetAllLists(this); Refresh(); }, lg);
+            // ---------------------------------------------------------------- About
+            Page("About");
+            Group("WINGMATE");
+            Add(new TextBlock { Text = "A companion for Aion 2: Abyss event alerts and a daily and weekly checklist for each character.",
+                TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4) });
+            var ab = Grid2();
+            Small("Show welcome guide", () => App.Current.ShowWelcome(), ab).ToolTip = "The short guide shown the first time Wingmate opens";
+            Small("Version history", () => App.OpenUrl(App.ReleasesUrl), ab).ToolTip = "What changed in each release (opens GitHub in your browser)";
+            var ab2 = Grid2();
+            Small("Project page", () => App.OpenUrl(App.ProjectUrl), ab2).ToolTip = "Wingmate on GitHub";
+            Small("Send feedback", () => App.OpenFeedback(), ab2).ToolTip = "Report a problem or suggest something (opens GitHub in your browser)";
+        }
+
+        /// <summary>The custom alerts list (on/off, Edit, Delete) and "Add custom alert…". The list rebuilds after every save.</summary>
+        private void BuildCustomAlerts()
+        {
+            Group("CUSTOM ALERTS");
+            var list = new StackPanel();
+            Add(list);
+            var empty = new TextBlock { Text = "None yet. Add your own alert with a name, time and days.", FontSize = 11, TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 2) }.Ref(TextBlock.ForegroundProperty, "muted");
+            string shown = "";
+            _refreshers.Add(() =>
+            {
+                var alerts = S.CustomAlerts ?? new List<CustomAlert>();
+                var key = string.Join("|", alerts.Select(a => $"{a.Id}/{a.Name}/{a.Time}/{string.Join(",", a.Days)}/{a.RepeatHours}/{a.Enabled}"));
+                if (key == shown && list.Children.Count > 0) return; // unchanged: keep the rows (and their focus)
+                shown = key;
+                list.Children.Clear();
+                if (alerts.Count == 0) { list.Children.Add(empty); return; }
+                foreach (var a in alerts.ToList()) list.Children.Add(FontScaler.Scaled(CustomAlertRow(a)));
+            });
+            var row = Grid2();
+            Small("Add custom alert\u2026", () => { CustomAlertWindow.Edit(this, null); Refresh(); }, row, () => (S.CustomAlerts?.Count ?? 0) < CustomAlerts.MaxCount)
+                .ToolTip = "Your own alert: a name, a time on the region's clock, days and an optional repeat";
+        }
+
+        private FrameworkElement CustomAlertRow(CustomAlert a)
+        {
+            var id = a.Id;
+            var row = new DockPanel { Margin = new Thickness(0, 1, 0, 1) };
+            var links = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            var edit = new Button { Content = "Edit", Style = Res<Style>("LinkButton"), FontSize = 11, Focusable = false, Margin = new Thickness(6, 0, 0, 0), ToolTip = "Change this alert" };
+            edit.Click += (s, e) => { var cur = S.CustomAlerts.FirstOrDefault(x => x.Id == id); if (cur != null) { CustomAlertWindow.Edit(this, cur); Refresh(); } };
+            var del = new Button { Content = "Delete", Style = Res<Style>("LinkButton"), FontSize = 11, Focusable = false, Margin = new Thickness(8, 0, 0, 0), ToolTip = "Delete this alert" };
+            del.Click += (s, e) =>
+            {
+                var cur = S.CustomAlerts.FirstOrDefault(x => x.Id == id);
+                if (cur == null || !ConfirmDialog.Ask(this, "Delete alert?", $"Delete the custom alert \"{cur.Name}\"?", "Delete", ConfirmKind.Danger)) return;
+                S.CustomAlerts.RemoveAll(x => x.Id == id);
+                SaveS();
+            };
+            links.Children.Add(edit); links.Children.Add(del);
+            DockPanel.SetDock(links, Dock.Right);
+            row.Children.Add(links);
+            var label = new StackPanel { Orientation = Orientation.Horizontal };
+            label.Children.Add(new TextBlock { Text = a.Name, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 150 });
+            label.Children.Add(new TextBlock { Text = "  " + CustomAlerts.Describe(a), FontSize = 11, VerticalAlignment = VerticalAlignment.Center }.Ref(TextBlock.ForegroundProperty, "muted"));
+            var cb = new CheckBox { Content = label, Style = Res<Style>("DarkCheck"), IsChecked = a.Enabled, Margin = new Thickness(0, 2, 0, 2),
+                ToolTip = a.Enabled ? "On: click to turn this alert off" : "Off: click to turn this alert on" };
+            cb.Click += (s, e) =>
+            {
+                var cur = S.CustomAlerts.FirstOrDefault(x => x.Id == id);
+                if (cur == null) return;
+                cur.Enabled = cb.IsChecked == true;
+                SaveS();
+            };
+            row.Children.Add(cb);
+            return row;
         }
 
         /// <summary>Theme pills, each with a dot in that theme's panel and title colours. Applies live.</summary>

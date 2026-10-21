@@ -177,7 +177,7 @@ namespace Wingmate
                 var region = Region;
                 TitleText.Text = $"Abyss alerts · {region.Name} · times in {TimeZones.LocalAbbrev(now)}";
                 TitleText.ToolTip = $"Schedule {App.Schedule.Current.Version} ({App.Schedule.SourceLabel}). Drag to move, grip = width, right-click for options.";
-                var occ = ScheduleEngine.Occurrences(App.Schedule.Current, region, Include, now);
+                var occ = ScheduleEngine.Occurrences(CustomAlerts.With(App.Schedule.Current, S.CustomAlerts), region, Include, now); // built-in events plus the custom alerts that are on
                 var (mode, lines) = AbyssDisplay.Build(occ, now);
                 if (lines.Count == 0)
                 {
@@ -327,7 +327,6 @@ namespace Wingmate
             Menu.Items.Add(Item("Reset position / size", ResetLayout));
             Menu.Items.Add(Sep());
             Menu.Items.Add(Item("Open launcher", () => App.Current.ShowLauncher()));
-            Menu.Items.Add(Item("Support this app \u2764\uFE0F", App.OpenSupport));
             Menu.Items.Add(Item("Hide alerts", () => App.Current.HideAbyss()));
             Menu.Items.Add(Item("Exit Wingmate", () => App.Current.ExitApp()));
         }

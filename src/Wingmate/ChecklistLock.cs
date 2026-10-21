@@ -16,11 +16,12 @@ namespace Wingmate
     /// the mouse position (GetCursorPos, no hook) and turns the click-through bit off only while the pointer is over the
     /// visible list, back on everywhere else (header, buttons, footer, edges), where clicks keep going to the game. Over the
     /// list the window takes the mouse so the wheel reaches it, but every click is swallowed except a left click on a
-    /// checkbox. The list itself is not hit-testable while locked, so rows never highlight and nothing looks different.</summary>
+    /// checkbox or on the status line's "Undo" link (shown briefly after a check). The list itself is not hit-testable while locked, so rows never highlight and nothing looks different.</summary>
     public partial class ChecklistWindow
     {
         private readonly DispatcherTimer _lockTimer = new() { Interval = TimeSpan.FromMilliseconds(30) };
         private ChecklistItem? _lockedPress;
+        private bool _lockedUndoPress;
         private bool? _lockTakesMouse;
 
         private sealed record Target(Rect Box, ChecklistItem Item, SectionView View);
@@ -43,6 +44,7 @@ namespace Wingmate
             ForceCursor = on;
             Cursor = on ? Cursors.Arrow : null;
             _lockedPress = null;
+            _lockedUndoPress = false;
             _lockTakesMouse = null;
             UpdateLockTimer();
             if (on) LockTick();
@@ -70,8 +72,16 @@ namespace Wingmate
             Rect listRect;
             try { listRect = Scroller.TransformToAncestor(this).TransformBounds(new Rect(0, 0, Scroller.ActualWidth, Scroller.ActualHeight)); }
             catch (InvalidOperationException) { return (LockZone.PassThrough, null); }
+            Box? undo = null;
+            if (UndoBtn.IsVisible && UndoBtn.ActualWidth > 0)
+            {
+                try { undo = ToBox(UndoBtn.TransformToAncestor(this).TransformBounds(new Rect(0, 0, UndoBtn.ActualWidth, UndoBtn.ActualHeight))); }
+                catch (InvalidOperationException) { }
+            }
+            if (undo is Box ub && ub.Inflate(LockedInput.UndoSlop).Contains(p.X, p.Y)) return (LockZone.Undo, null);
+            if (!ToBox(listRect).Contains(p.X, p.Y)) return (LockZone.PassThrough, null); // outside the list: no need to measure checkboxes
             var targets = Targets();
-            var (zone, i) = LockedInput.Classify(p.X, p.Y, ToBox(listRect), targets.Select(t => ToBox(t.Box)).ToList());
+            var (zone, i) = LockedInput.Classify(p.X, p.Y, ToBox(listRect), targets.Select(t => ToBox(t.Box)).ToList(), undo);
             return (zone, i >= 0 ? targets[i] : null);
         }
 
@@ -91,7 +101,7 @@ namespace Wingmate
                 _lockTakesMouse = take;
                 Native.SetTransparentBit(Handle, !take);
             }
-            var cur = zone == LockZone.Checkbox ? Cursors.Hand : Cursors.Arrow;
+            var cur = zone == LockZone.Checkbox || zone == LockZone.Undo ? Cursors.Hand : Cursors.Arrow;
             if (Cursor != cur) Cursor = cur;
         }
 
@@ -100,9 +110,11 @@ namespace Wingmate
             if (!ClickThrough) return;
             e.Handled = true; // locked: nothing in the window reacts to a press...
             _lockedPress = null;
+            _lockedUndoPress = false;
             if (e.ChangedButton != MouseButton.Left) return;
             var (zone, hit) = LockZoneAt(e.GetPosition(this));
             if (LockedInput.ClickToggles(zone) && hit != null) _lockedPress = hit.Item; // ...except a checkbox (toggles on release)
+            _lockedUndoPress = LockedInput.ClickUndoes(zone);                            // ...and the Undo link
         }
 
         private void LockedPreviewUp(object sender, MouseButtonEventArgs e)
@@ -110,9 +122,13 @@ namespace Wingmate
             if (!ClickThrough) return;
             e.Handled = true;
             var pressed = _lockedPress;
+            bool undoPressed = _lockedUndoPress;
             _lockedPress = null;
-            if (e.ChangedButton != MouseButton.Left || pressed == null) return;
+            _lockedUndoPress = false;
+            if (e.ChangedButton != MouseButton.Left) return;
             var (zone, hit) = LockZoneAt(e.GetPosition(this));
+            if (undoPressed) { if (LockedInput.ClickUndoes(zone)) UndoLastCheck(); return; }
+            if (pressed == null) return;
             if (LockedInput.ClickToggles(zone) && hit != null && ReferenceEquals(hit.Item, pressed)) hit.View.ToggleFromLocked(pressed);
         }
     }

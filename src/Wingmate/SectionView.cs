@@ -76,12 +76,13 @@ namespace Wingmate
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             _name.Text = (Section.Collapsed ? "\u25B8 " : "\u25BE ") + Section.Name;
             _name.Foreground = B(TXT);
-            _count.Text = $"{Section.Items.Count(i => i.Done)}/{Section.Items.Count}";
+            _count.Text = CountText();
             _count.Foreground = B(ACC);
             UpdateCountTip();
             var plus = new Button { Content = "+", Style = (Style)_win.FindResource("LinkButton"), FontSize = 14, FontWeight = FontWeights.SemiBold,
                 ToolTip = "Add an item", VerticalAlignment = VerticalAlignment.Center, Focusable = false };
             plus.Click += (s, e) => { if (!Busy) _win.AddItemTo(Section); };
+            if (!ListRules.CanEditItems(Section)) plus.Visibility = Visibility.Collapsed; // Events: kept up to date by Wingmate
             Grid.SetColumn(_count, 1); Grid.SetColumn(plus, 2);
             header.Children.Add(_name); header.Children.Add(_count); header.Children.Add(plus);
             bool headerPress = false;
@@ -105,8 +106,8 @@ namespace Wingmate
             header.Drop += (s, e) => { if (e.Data.GetData(DragFormat) is string id) _win.MoveItem(id, Section, 0); e.Handled = true; };
             _content.Children.Add(header);
             if (Section.Collapsed) return;
-            if (Section.Items.Count == 0)
-                _content.Children.Add(new TextBlock { Text = "No items yet. Click + to add one.", FontSize = 11, Foreground = B(DIM), Margin = new Thickness(2, 3, 0, 1) });
+            if (Section.LiveItems.Count == 0)
+                _content.Children.Add(new TextBlock { Text = Section.IsManaged ? "No events right now." : "No items yet. Click + to add one.", FontSize = 11, Foreground = B(DIM), Margin = new Thickness(2, 3, 0, 1) });
             else if (!CheckedItems.Visible(Section, ShowChecked).Any())
                 _content.Children.Add(new TextBlock { Text = "All checked.", FontSize = 11, Foreground = B(DIM), Margin = new Thickness(2, 3, 0, 1) });
             foreach (var item in CheckedItems.Visible(Section, ShowChecked)) _content.Children.Add(MakeRow(item).Grid);
@@ -143,7 +144,7 @@ namespace Wingmate
             };
             r.Grid.MouseMove += (s, e) =>
             {
-                if (press == null || e.LeftButton != MouseButtonState.Pressed || Busy) return;
+                if (press == null || e.LeftButton != MouseButtonState.Pressed || Busy || !ListRules.CanEditItems(Section)) return;
                 var d = e.GetPosition(r.Grid) - press.Value;
                 if (Math.Abs(d.X) < 5 && Math.Abs(d.Y) < 5) return;
                 press = null;
@@ -174,6 +175,8 @@ namespace Wingmate
         private static bool ShowChecked => App.Settings.ShowCheckedItems;
         private static readonly Random FxRng = new();
 
+        private string CountText() { var live = Section.LiveItems; return $"{live.Count(i => i.Done)}/{live.Count}"; }
+
         private void UpdateCountTip()
         {
             int hidden = CheckedItems.HiddenCount(Section, ShowChecked);
@@ -191,7 +194,7 @@ namespace Wingmate
             bool warp = row != null && CheckedItems.WarpOutOnCheck(Section, item, ShowChecked);
             RefreshRows();
             _win.ItemToggled(this, was); // saves; celebrates if that completed the list
-            if (warp && !Busy) WarpOutRow(row!, WarpPicker.Next(FxRng));
+            if (warp && !Busy) { WarpOutRow(row!, WarpPicker.Next(FxRng)); _win.OfferUndo(item); }
         }
 
         /// <summary>Locked window: the checkbox of every visible row (its 14 px box) in <paramref name="relativeTo"/>'s coordinates,
@@ -241,7 +244,7 @@ namespace Wingmate
         public void RefreshRows()
         {
             foreach (var row in _rows) ApplyRowVisual(row);
-            _count.Text = $"{Section.Items.Count(i => i.Done)}/{Section.Items.Count}";
+            _count.Text = CountText();
             UpdateCountTip();
         }
 
@@ -273,17 +276,23 @@ namespace Wingmate
         {
             m.Items.Clear();
             int idx = _win.State.Sections.IndexOf(Section);
-            m.Items.Add(Mi("Add item", () => _win.AddItemTo(Section)));
-            if (Section.IsCustom) m.Items.Add(Mi("Rename list", () => _win.RenameSection(Section)));
+            bool editable = ListRules.CanEditItems(Section);
+            if (editable) m.Items.Add(Mi("Add item", () => _win.AddItemTo(Section)));
+            if (ListRules.CanRenameList(Section)) m.Items.Add(Mi("Rename list", () => _win.RenameSection(Section)));
             m.Items.Add(Mi("Uncheck all", () => { foreach (var i in Section.Items) i.Done = false; _win.Save(); _win.RequestRebuild(); }, Section.Items.Any(i => i.Done)));
+            var checkAll = Mi("Check all and hide", () => _win.CheckAllAndHide(this), Section.LiveItems.Any(i => !i.Done));
+            checkAll.ToolTip = "Check off every item in this list. It comes back unchecked at its reset.";
+            m.Items.Add(checkAll);
             var showChk = new MenuItem { Header = "Show checked items", IsChecked = ShowChecked };
             showChk.Click += (s2, e2) => { e2.Handled = true; _win.ToggleShowChecked(); };
             m.Items.Add(showChk);
             m.Items.Add(Mi("Move list up", () => _win.MoveSection(Section, -1), idx > 0));
             m.Items.Add(Mi("Move list down", () => _win.MoveSection(Section, 1), idx < _win.State.Sections.Count - 1));
-            m.Items.Add(Mi("Hide list", () => { Section.Hidden = true; _win.Save(); _win.RequestRebuild(); }));
+            var hide = Mi("Hide list (no checking)", () => { Section.Hidden = true; _win.Save(); _win.RequestRebuild(); });
+            hide.ToolTip = "Hide this list without checking anything. \"Show hidden sections\" in the checklist menu brings it back.";
+            m.Items.Add(hide);
             var others = App.Book.Characters.Where(c => c != _win.State).ToList();
-            if (others.Count > 0) // "Copy to" another character (only when there is one)
+            if (others.Count > 0 && editable) // "Copy to" another character (only when there is one; not the Events list)
             {
                 var copy = new MenuItem { Header = "Copy to", IsEnabled = Section.Items.Count > 0 };
                 foreach (var c in others)
@@ -296,15 +305,28 @@ namespace Wingmate
                 copy.Items.Add(Mi("All characters", () => _win.CopyList(Section, ids)));
                 m.Items.Add(copy);
             }
-            m.Items.Add(new Separator { Style = (Style)_win.FindResource("DarkSep") });
-            if (Section.IsCustom) m.Items.Add(Mi("Delete list...", () => _win.DeleteSection(Section)));
-            else m.Items.Add(Mi("Reset to default...", () => _win.ResetToDefault(Section)));
+            if (ListRules.CanDeleteList(Section) || ListRules.CanResetToDefault(Section)) m.Items.Add(new Separator { Style = (Style)_win.FindResource("DarkSep") });
+            if (ListRules.CanDeleteList(Section)) m.Items.Add(Mi("Delete list...", () => _win.DeleteSection(Section)));
+            else if (ListRules.CanResetToDefault(Section)) m.Items.Add(Mi("Reset to default...", () => _win.ResetToDefault(Section)));
+            if (!editable)
+                m.Items.Add(new MenuItem { Header = "Kept up to date by Wingmate", IsEnabled = false });
             m.IsEnabled = !Busy;
         }
 
         private void BuildItemMenu(ContextMenu m, Row r)
         {
             m.Items.Clear();
+            if (!ListRules.CanEditItems(Section))
+            {
+                // Events: check and uncheck only
+                m.Items.Add(Mi(r.Item.Done ? "Uncheck" : "Check", () => Toggle(r.Item)));
+                var show = new MenuItem { Header = "Show checked items", IsChecked = ShowChecked };
+                show.Click += (s2, e2) => { e2.Handled = true; _win.ToggleShowChecked(); };
+                m.Items.Add(show);
+                m.Items.Add(new MenuItem { Header = "Kept up to date by Wingmate", IsEnabled = false });
+                m.IsEnabled = !Busy;
+                return;
+            }
             int i = Section.Items.IndexOf(r.Item), n = Section.Items.Count;
             m.Items.Add(Mi("Edit", () => _win.EditItem(Section, r.Item)));
             m.Items.Add(Mi("Move up", () => _win.MoveItem(r.Item.Id, Section, i - 1), i > 0));
@@ -762,7 +784,7 @@ namespace Wingmate
                     if (chars != null) foreach (var c in chars) if (c.G != null) _fx.Children.Remove(c.G);
                     if (flash != null) _fx.Children.Remove(flash);
                     foreach (var el in made) _fx.Children.Remove(el);
-                    if (Section.Items.Count > 0 && !CheckedItems.Visible(Section, ShowChecked).Any() && !Busy && !Section.Collapsed)
+                    if (Section.LiveItems.Count > 0 && !CheckedItems.Visible(Section, ShowChecked).Any() && !Busy && !Section.Collapsed)
                         _content.Children.Add(FontScaler.Scaled(new TextBlock { Text = "All checked.", FontSize = 11, Foreground = B(DIM), Margin = new Thickness(2, 3, 0, 1) }));
                 }
                 catch (Exception ex) { Log.Write("item warp: " + ex.Message); }

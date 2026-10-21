@@ -13,6 +13,26 @@ namespace Wingmate
     {
         public const string SupportUrl = "https://ko-fi.com/beespecial3d";
         public const string ProjectUrl = "https://github.com/BeeSpecial3D/Wingmate";
+        public const string ReleasesUrl = "https://github.com/BeeSpecial3D/Wingmate/releases";
+
+        /// <summary>Fills a version label: the version part (e.g. "v1.0.7") becomes a link to the version history on GitHub,
+        /// in the label's own colour (hand cursor, underline on hover, tooltip "Version history"); prefix and suffix stay plain.</summary>
+        public static void SetVersionLink(System.Windows.Controls.TextBlock tb, string version, string prefix = "", string suffix = "")
+        {
+            tb.Inlines.Clear();
+            if (prefix.Length > 0) tb.Inlines.Add(new System.Windows.Documents.Run(prefix));
+            var link = new System.Windows.Documents.Hyperlink(new System.Windows.Documents.Run(version))
+            {
+                Cursor = System.Windows.Input.Cursors.Hand, ToolTip = "Version history", Focusable = false, TextDecorations = null,
+            };
+            link.SetBinding(System.Windows.Documents.TextElement.ForegroundProperty,
+                new System.Windows.Data.Binding(nameof(System.Windows.Controls.TextBlock.Foreground)) { Source = tb }); // keeps the label's colour
+            link.MouseEnter += (s, e) => link.TextDecorations = System.Windows.TextDecorations.Underline;
+            link.MouseLeave += (s, e) => link.TextDecorations = null;
+            link.Click += (s, e) => OpenUrl(ReleasesUrl);
+            tb.Inlines.Add(link);
+            if (suffix.Length > 0) tb.Inlines.Add(new System.Windows.Documents.Run(suffix));
+        }
         public static AppSettings Settings { get; private set; } = new();
         /// <summary>Every character's checklist (checklist.json). Loaded once at startup.</summary>
         public static ChecklistBook Book { get; private set; } = ChecklistBook.CreateNew();
@@ -80,6 +100,7 @@ namespace Wingmate
             try { _hotkey = new Hotkey(); _hotkey.Pressed += ToggleBothClickThrough; ApplyHotkey(); }
             catch (Exception ex) { Log.Write("hotkey: " + ex.Message); }
             OpenStartupWindows();
+            if (!Settings.WelcomeShown) Dispatcher.BeginInvoke(new Action(() => ShowWelcome()), DispatcherPriority.ApplicationIdle); // once (new users and updaters)
             if (!Release.DataIsSeparateFromInstall(AppSettings.Dir, AppContext.BaseDirectory))
                 Log.Write("warning: data folder and program folder overlap: " + AppContext.BaseDirectory);
             Updates.Changed += OnUpdatesChanged;
@@ -186,7 +207,6 @@ namespace Wingmate
             m.Items.Add(_trayClickList);
             m.Items.Add(new WF.ToolStripSeparator());
             m.Items.Add("Send feedback", null, (s, a) => OpenFeedback());
-            m.Items.Add("Support this app \u2764\uFE0F", null, (s, a) => OpenSupport());
             m.Items.Add("Exit Wingmate", null, (s, a) => ExitApp());
             m.Opening += (s, a) =>
             {
@@ -255,6 +275,7 @@ namespace Wingmate
             try
             {
                 ColorPickerDialog.CancelOpen();
+                CustomAlertWindow.CancelOpen();
                 _customColors?.Close();
                 _settings?.Close();
             }
@@ -278,6 +299,7 @@ namespace Wingmate
             var legacy = string.IsNullOrWhiteSpace(Settings.ChecklistTitle) ? "Wingmate" : Settings.ChecklistTitle.Trim(); // the old window title
             Book = ChecklistBook.Load(ChecklistState.DefaultPath, legacy);
             if (Book.Migrated) { SaveBook(); Log.Write("checklist migration: saved in the new per-character format"); }
+            else if (Book.ListsUpdated) { SaveBook(); Log.Write("checklist: one-time list update applied (new weeklies, Events list)"); }
             if (Book.ReadOnly) Log.Write("checklist: running without saving because checklist.json could not be read safely");
         }
 
@@ -414,6 +436,23 @@ namespace Wingmate
         }
 
         public bool CustomColorsOpen => _customColors != null;
+
+        private WelcomeWindow? _welcome;
+
+        /// <summary>The welcome guide (one at a time). The first time it opens counts as seen, so it never comes back on its own.</summary>
+        public void ShowWelcome(int page = 0)
+        {
+            if (Exiting) return;
+            if (_welcome == null)
+            {
+                _welcome = new WelcomeWindow((Window?)_settings ?? _launcher);
+                _welcome.Closed += (s, a) => _welcome = null;
+            }
+            _welcome.ShowPage(page);
+            _welcome.Show();
+            _welcome.Activate();
+            if (!Settings.WelcomeShown) { Settings.WelcomeShown = true; Settings.Save(); }
+        }
 
         /// <summary>Settings' "Edit custom colors…": closes the Custom colors window if it is open (its position is saved
         /// on close), otherwise opens it.</summary>

@@ -110,7 +110,7 @@
         <Grid>
           <StackPanel>
             <TextBlock Text="Checklist"/>
-            <TextBlock x:Name="ChecklistSub" Text="Dailies, weeklies and your own lists" FontSize="10.5" FontWeight="Normal" Foreground="{DynamicResource Th.muted}"/>
+            <TextBlock x:Name="ChecklistSub" Text="Dailies, weeklies, events and your own lists" FontSize="10.5" FontWeight="Normal" Foreground="{DynamicResource Th.muted}"/>
           </StackPanel>
           <Border x:Name="ChecklistBadge" HorizontalAlignment="Right" VerticalAlignment="Center" CornerRadius="3" Padding="5,1" Background="{DynamicResource Th.badgeBg}">
             <TextBlock x:Name="ChecklistBadgeText" Text="CLOSED" FontSize="9" FontWeight="SemiBold"/>

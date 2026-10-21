@@ -39,6 +39,22 @@ namespace Wingmate.Core
 
         public static bool IsKnown(string? name) => Normalize(name).Length > 0;
 
+        public const string NoClassLabel = "No class";
+
+        /// <summary>One entry of a right-click "Class" submenu: the label, the class it sets ("" = none) and whether it is ticked.</summary>
+        public sealed record MenuEntry(string Label, string Value, bool IsChecked, bool SeparatorBefore = false);
+
+        /// <summary>The right-click "Class" submenu: the eight classes, then "No class". The character's class is ticked;
+        /// "No class" is ticked when it has none. A class this version doesn't know (e.g. from a newer version) ticks nothing.</summary>
+        public static IReadOnlyList<MenuEntry> MenuEntries(string? current)
+        {
+            var n = Normalize(current);
+            bool none = string.IsNullOrWhiteSpace(current);
+            var list = All.Select(c => new MenuEntry(c.Name, c.Name, c.Name == n)).ToList();
+            list.Add(new MenuEntry(NoClassLabel, "", none, SeparatorBefore: true));
+            return list;
+        }
+
         /// <summary>The class's guide page, or the site's class index when the class is empty or unknown.</summary>
         public static string GuideUrlFor(string? name)
         {

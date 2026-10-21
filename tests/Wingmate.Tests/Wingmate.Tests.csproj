@@ -20,6 +20,10 @@
     <Compile Include="..\..\src\Wingmate\Core\MenuCompanions.cs" />
     <Compile Include="..\..\src\Wingmate\Core\CharacterClasses.cs" />
     <Compile Include="..\..\src\Wingmate\Core\LockedInput.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\SafeFile.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\CustomAlerts.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\WelcomeGuide.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\EventsList.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />

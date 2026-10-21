@@ -47,3 +47,32 @@ public class LockedInputTests
         Assert.Equal((LockZone.List, -1), LockedInput.Classify(100, 100, List, new List<Box>()));
     }
 }
+
+public class LockedUndoTests
+{
+    static readonly Box List = new(10, 50, 300, 400);
+    static readonly List<Box> Checks = new() { new Box(12, 60, 14, 14) };
+    static readonly Box Undo = new(120, 30, 28, 13); // in the header, outside the list
+
+    [Fact] public void OverTheUndoLink_TakesTheClick()
+    {
+        var (zone, i) = LockedInput.Classify(130, 36, List, Checks, Undo);
+        Assert.Equal(LockZone.Undo, zone); Assert.Equal(-1, i);
+        Assert.True(LockedInput.TakesMouse(zone));
+        Assert.True(LockedInput.ClickUndoes(zone));
+        Assert.False(LockedInput.ClickToggles(zone));
+    }
+
+    [Fact] public void RestOfTheHeader_StillPassesThrough()
+    {
+        Assert.Equal(LockZone.PassThrough, LockedInput.Classify(60, 36, List, Checks, Undo).Zone);
+        Assert.False(LockedInput.ClickUndoes(LockZone.PassThrough));
+        Assert.False(LockedInput.ClickUndoes(LockZone.Checkbox));
+    }
+
+    [Fact] public void NoUndoLink_HeaderPassesThrough()
+    {
+        Assert.Equal(LockZone.PassThrough, LockedInput.Classify(130, 36, List, Checks).Zone);
+        Assert.Equal(LockZone.Checkbox, LockedInput.Classify(19, 67, List, Checks, Undo).Zone);
+    }
+}

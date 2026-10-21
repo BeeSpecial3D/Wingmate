@@ -42,10 +42,10 @@ public class CharacterClassTests
         Assert.All(b.Characters, c => Assert.Equal("", c.Class));
         Assert.Equal("b2", b.CurrentId);
         var a = b.Characters[0];
-        Assert.Equal(3, a.Sections.Count);
+        Assert.Equal(4, a.Sections.Count); // 1.0.7 adds the Events list after Weeklies
         Assert.Equal(new[] { true, false }, a.Sections[0].Items.Select(i => i.Done));
         Assert.True(a.Sections[0].Collapsed); Assert.True(a.Sections[1].Hidden);
-        Assert.Equal("Farming", a.Sections[2].Name);
+        Assert.Equal("Farming", a.Sections[3].Name);
         Assert.Equal(new DateTime(2026, 10, 19, 7, 0, 0, DateTimeKind.Utc), a.LastDailyReset?.ToUniversalTime());
         Assert.Equal(new DateTime(2026, 10, 14, 7, 0, 0, DateTimeKind.Utc), a.LastWeeklyReset?.ToUniversalTime());
 
@@ -146,5 +146,45 @@ public class CharacterClassTests
         Assert.Equal(CharacterClasses.IndexUrl, CharacterClasses.GuideUrlFor(null));
         Assert.Equal(CharacterClasses.IndexUrl, CharacterClasses.GuideUrlFor("Bard"));
         Assert.Contains("aion2-guides.info", CharacterClasses.Credit);
+    }
+}
+
+public class ClassMenuTests
+{
+    [Xunit.Fact] public void Menu_ListsEveryClass_ThenNoClass()
+    {
+        var m = Wingmate.Core.CharacterClasses.MenuEntries("Templar");
+        Xunit.Assert.Equal(9, m.Count);
+        Xunit.Assert.Equal(Wingmate.Core.CharacterClasses.Names, System.Linq.Enumerable.Select(System.Linq.Enumerable.Take(m, 8), e => e.Label));
+        Xunit.Assert.Equal("No class", m[8].Label);
+        Xunit.Assert.Equal("", m[8].Value);
+        Xunit.Assert.True(m[8].SeparatorBefore);
+    }
+
+    [Xunit.Fact] public void Menu_TicksTheCurrentClass()
+    {
+        var m = Wingmate.Core.CharacterClasses.MenuEntries("cleric");
+        Xunit.Assert.Single(m, e => e.IsChecked);
+        Xunit.Assert.True(System.Linq.Enumerable.First(m, e => e.Label == "Cleric").IsChecked);
+        Xunit.Assert.False(m[8].IsChecked);
+    }
+
+    [Xunit.Theory, Xunit.InlineData(""), Xunit.InlineData(null), Xunit.InlineData("  ")]
+    public void Menu_TicksNoClass_WhenThereIsNone(string? cls)
+    {
+        var m = Wingmate.Core.CharacterClasses.MenuEntries(cls);
+        Xunit.Assert.Single(m, e => e.IsChecked);
+        Xunit.Assert.True(m[8].IsChecked);
+    }
+
+    [Xunit.Fact] public void Menu_UnknownClassFromNewerVersion_TicksNothing()
+        => Xunit.Assert.DoesNotContain(Wingmate.Core.CharacterClasses.MenuEntries("Necromancer"), e => e.IsChecked);
+
+    [Xunit.Fact] public void PickingNoClass_ClearsIt()
+    {
+        var b = Wingmate.Core.ChecklistBook.CreateNew();
+        b.SetFirstName("Daeva", "Ranger");
+        Xunit.Assert.True(b.SetClass(b.Current.Id, Wingmate.Core.CharacterClasses.MenuEntries(b.Current.Class)[8].Value));
+        Xunit.Assert.Equal("", b.Current.Class);
     }
 }

@@ -26,9 +26,9 @@ public class CharacterTests
         Assert.Equal(oldText, File.ReadAllText(path)); // load itself never writes
         var c = Assert.Single(b.Characters);
         Assert.Equal("Wingmate", c.Name); Assert.Same(c, b.Current);
-        Assert.Equal(3, c.Sections.Count);
+        Assert.Equal(4, c.Sections.Count); // Dailies, Weeklies, Events, Farming
         Assert.Equal(old.Sections.SelectMany(x => x.Items).Select(i => (i.Id, i.Text, i.Done)), c.Sections.SelectMany(x => x.Items).Select(i => (i.Id, i.Text, i.Done)));
-        Assert.True(c.Sections[1].Hidden); Assert.True(c.Sections[2].Collapsed);
+        Assert.True(c.Sections[1].Hidden); Assert.True(c.Sections[3].Collapsed);
         Assert.Equal(old.LastDailyReset, c.LastDailyReset); Assert.Equal(old.LastWeeklyReset, c.LastWeeklyReset);
 
         b.Save(path); // new format round-trips

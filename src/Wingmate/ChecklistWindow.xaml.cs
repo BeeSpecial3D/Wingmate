@@ -99,6 +99,7 @@ namespace Wingmate
         public void LoadCharacter()
         {
             CommitActiveEdit();
+            if (_undoItemId != null || _undoAll != null) StatusTimer_Tick(null, EventArgs.Empty); // the undo line belongs to the previous character
             TitleText.Text = DisplayTitle;
             RefreshSwap();
             CheckResets(rebuild: false);
@@ -154,20 +155,76 @@ namespace Wingmate
         private DispatcherTimer? _statusTimer;
 
         /// <summary>Shows a short message in place of the reset line for a few seconds (e.g. after "Copy to").</summary>
-        public void FlashStatus(string text)
+        public void FlashStatus(string text, double seconds = 4)
         {
             if (string.IsNullOrEmpty(text)) return;
+            ClearUndo();
             _status = text;
             ResetText.Text = text;
             ResetText.ToolTip = text;
             _statusTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
             _statusTimer.Stop();
+            _statusTimer.Interval = TimeSpan.FromSeconds(seconds);
             _statusTimer.Tick -= StatusTimer_Tick;
             _statusTimer.Tick += StatusTimer_Tick;
             _statusTimer.Start();
         }
 
-        private void StatusTimer_Tick(object? sender, EventArgs e) { _statusTimer?.Stop(); _status = null; ResetText.ToolTip = null; UpdateResetText(); }
+        private void StatusTimer_Tick(object? sender, EventArgs e) { _statusTimer?.Stop(); _status = null; ClearUndo(); ResetText.ToolTip = null; UpdateResetText(); }
+
+        // ------------------------------------------------------------ undo the last check
+        private string? _undoItemId;
+
+        /// <summary>An item was just checked and is disappearing: "Checked {item} · Undo" for a few seconds. A newer check replaces it.</summary>
+        public void OfferUndo(ChecklistItem item)
+        {
+            FlashStatus(UndoCheck.Text(item.Text), UndoCheck.Seconds);
+            ResetText.ToolTip = null;
+            _undoItemId = item.Id;
+            UndoBtn.Visibility = Visibility.Visible;
+        }
+
+        private CheckAll.Snapshot? _undoAll;
+
+        /// <summary>"Check all and hide" (list right-click menu): checks every unchecked item, then the list finishes the normal way
+        /// (celebration, then it hides; it comes back at its reset). "Checked all in {list} · Undo" puts it back in one go.</summary>
+        public void CheckAllAndHide(SectionView view)
+        {
+            CommitActiveEdit();
+            var sec = view.Section;
+            if (view.Busy || !State.Sections.Contains(sec)) return;
+            bool was = sec.IsComplete;
+            var snap = CheckAll.Apply(sec);
+            if (snap == null) return;
+            view.RefreshRows();
+            ItemToggled(view, was); // saves; plays the list celebration, which hides the list when it ends
+            FlashStatus(CheckAll.Text(sec.Name), UndoCheck.Seconds);
+            ResetText.ToolTip = null;
+            _undoAll = snap;
+            UndoBtn.Visibility = Visibility.Visible;
+            Log.Write("check all and hide");
+        }
+
+        private void ClearUndo()
+        {
+            _undoItemId = null;
+            _undoAll = null;
+            UndoBtn.Visibility = Visibility.Collapsed;
+        }
+
+        private void Undo_Click(object sender, RoutedEventArgs e) => UndoLastCheck();
+
+        /// <summary>Unchecks the item from the undo line and brings it back (after its warp-out ends, if it is still running).</summary>
+        public void UndoLastCheck()
+        {
+            var id = _undoItemId; var all = _undoAll;
+            _statusTimer?.Stop(); _status = null; ClearUndo(); UpdateResetText();
+            if (all != null) { if (!CheckAll.Undo(State, all)) return; }
+            else if (id == null || !UndoCheck.Undo(State, id)) return;
+            Save();
+            Log.Write("check undone");
+            RequestRebuild();
+        }
 
         /// <summary>"Copy to" from a list title menu.</summary>
         public void CopyList(ChecklistSection sec, System.Collections.Generic.IEnumerable<string> characterIds)
@@ -326,6 +383,7 @@ namespace Wingmate
         {
             var src = State.Sections.FirstOrDefault(s => s.Items.Any(i => i.Id == itemId));
             if (src == null) return;
+            if (!ListRules.CanMoveItem(src, target)) return; // nothing moves into or out of the Events list
             var item = src.Items.First(i => i.Id == itemId);
             int old = src.Items.IndexOf(item);
             src.Items.RemoveAt(old);
@@ -345,7 +403,7 @@ namespace Wingmate
 
         public void DeleteSection(ChecklistSection sec)
         {
-            if (!sec.IsCustom) return;
+            if (!ListRules.CanDeleteList(sec)) return;
             if (!ConfirmDialog.Ask(this, $"Delete \"{sec.Name}\"?",
                     $"Delete the list \"{sec.Name}\" and its {sec.Items.Count} item{(sec.Items.Count == 1 ? "" : "s")}? This can't be undone.",
                     "Delete", ConfirmKind.Danger)) return;
@@ -354,7 +412,7 @@ namespace Wingmate
 
         public void ResetToDefault(ChecklistSection sec)
         {
-            if (sec.IsCustom) return;
+            if (!ListRules.CanResetToDefault(sec)) return;
             if (!ConfirmDialog.Ask(this, $"Reset {sec.Name}?",
                     $"Reset {sec.Name} to the default list? Your current items will be replaced. A backup is saved first.",
                     "Reset", ConfirmKind.Primary)) return;
@@ -386,7 +444,7 @@ namespace Wingmate
         public void AddItemTo(ChecklistSection sec)
         {
             CommitActiveEdit();
-            if (!State.Sections.Contains(sec)) return;
+            if (!State.Sections.Contains(sec) || !ListRules.CanEditItems(sec)) return;
             var item = new ChecklistItem { Text = "" };
             sec.Items.Add(item);
             sec.Collapsed = false;
@@ -398,7 +456,7 @@ namespace Wingmate
         public void EditItem(ChecklistSection sec, ChecklistItem item)
         {
             CommitActiveEdit();
-            if (!sec.Items.Contains(item)) return;
+            if (!sec.Items.Contains(item) || !ListRules.CanEditItems(sec)) return;
             Rebuild();
             ViewFor(sec)?.BeginItemEdit(item, isNew: false);
         }
@@ -406,7 +464,7 @@ namespace Wingmate
         public void RenameSection(ChecklistSection sec)
         {
             CommitActiveEdit();
-            if (!State.Sections.Contains(sec)) return;
+            if (!State.Sections.Contains(sec) || !ListRules.CanRenameList(sec)) return;
             Rebuild();
             ViewFor(sec)?.StartRename(isNew: false);
         }
@@ -430,7 +488,7 @@ namespace Wingmate
             Save(); RequestRebuild();
         }
 
-        private SectionView? FirstPreviewable => SectionsHost.Children.OfType<SectionView>().FirstOrDefault(v => v.Section.Items.Count > 0);
+        private SectionView? FirstPreviewable => SectionsHost.Children.OfType<SectionView>().FirstOrDefault(v => v.Section.LiveItems.Count > 0);
         public bool CanPreview => FirstPreviewable != null && _running == 0;
         public void PreviewCelebration() { var f = FirstPreviewable; if (f != null && !f.Busy && _running == 0) Celebrate(f, preview: true); }
 
@@ -473,11 +531,11 @@ namespace Wingmate
             Menu.Items.Add(Item("+ New list", NewList));
             Menu.Items.Add(Item("Rename title", StartTitleEdit));
             var cls = new MenuItem { Header = "Class" };
-            var curClass = CharacterClasses.Normalize(State.Class);
-            foreach (var name in CharacterClasses.Names)
+            foreach (var entry in CharacterClasses.MenuEntries(State.Class))
             {
-                var n = name;
-                cls.Items.Add(Item(n, () => App.Current.SetCharacterClass(n), n == curClass));
+                var v = entry.Value;
+                if (entry.SeparatorBefore) cls.Items.Add(Sep());
+                cls.Items.Add(Item(entry.Label, () => App.Current.SetCharacterClass(v), entry.IsChecked));
             }
             Menu.Items.Add(cls);
             int hidden = State.Sections.Count(x => x.Hidden);
@@ -499,7 +557,6 @@ namespace Wingmate
             Menu.Items.Add(Item("Reset position / size", ResetLayout));
             Menu.Items.Add(Sep());
             Menu.Items.Add(Item("Open launcher", () => App.Current.ShowLauncher()));
-            Menu.Items.Add(Item("Support this app \u2764\uFE0F", App.OpenSupport));
             Menu.Items.Add(Item("Exit Wingmate", () => App.Current.ExitApp()));
         }
     }

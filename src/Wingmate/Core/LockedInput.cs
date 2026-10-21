@@ -18,6 +18,8 @@ namespace Wingmate.Core
         List,
         /// <summary>Over an item's checkbox: a click checks or unchecks it.</summary>
         Checkbox,
+        /// <summary>Over the "Undo" link in the status line (shown for a few seconds after checking an item): a click undoes it.</summary>
+        Undo,
     }
 
     /// <summary>Locked checklist: the wheel still scrolls the list and the checkboxes still toggle; nothing else takes clicks.
@@ -26,11 +28,14 @@ namespace Wingmate.Core
     {
         /// <summary>Extra margin around each 14 px checkbox so it is easy to hit.</summary>
         public const double CheckboxSlop = 3;
+        /// <summary>Extra margin around the small "Undo" link.</summary>
+        public const double UndoSlop = 2;
 
         /// <summary>The zone under (x, y) and, for a checkbox, its index in <paramref name="checkboxes"/>. Only what is inside
         /// the visible list area counts (checkboxes scrolled out of view never take clicks).</summary>
-        public static (LockZone Zone, int Index) Classify(double x, double y, Box list, IReadOnlyList<Box> checkboxes)
+        public static (LockZone Zone, int Index) Classify(double x, double y, Box list, IReadOnlyList<Box> checkboxes, Box? undo = null)
         {
+            if (undo is Box u && u.Inflate(UndoSlop).Contains(x, y)) return (LockZone.Undo, -1);
             if (!list.Contains(x, y)) return (LockZone.PassThrough, -1);
             for (int i = 0; i < checkboxes.Count; i++)
                 if (checkboxes[i].Inflate(CheckboxSlop).Contains(x, y)) return (LockZone.Checkbox, i);
@@ -42,5 +47,8 @@ namespace Wingmate.Core
 
         /// <summary>True when a click there may change something (only a checkbox).</summary>
         public static bool ClickToggles(LockZone zone) => zone == LockZone.Checkbox;
+
+        /// <summary>True when a click there undoes the last check.</summary>
+        public static bool ClickUndoes(LockZone zone) => zone == LockZone.Undo;
     }
 }

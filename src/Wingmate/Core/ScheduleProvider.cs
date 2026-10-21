@@ -51,8 +51,7 @@ namespace Wingmate.Core
                 var s = ScheduleParser.TryParse(json, out var err);
                 if (s == null) { Log.Write("online schedule ignored: " + err); return; }
                 if (string.CompareOrdinal(s.Version, Current.Version) < 0) return;
-                Directory.CreateDirectory(AppSettings.Dir);
-                File.WriteAllText(CachePath, json, new UTF8Encoding(false));
+                SafeFile.WriteAtomic(CachePath, json, keepBackup: false); // a cache: whole or old, no .bak needed
                 Current = s; SourceLabel = "online";
                 Changed?.Invoke();
             }

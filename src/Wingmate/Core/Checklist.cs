@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Wingmate.Core
 {
@@ -12,19 +13,39 @@ namespace Wingmate.Core
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
         public string Text { get; set; } = "";
         public bool Done { get; set; }
+
+        // Events list only: filled in from the app's event definitions on load (EventsList.Sync), never saved.
+        /// <summary>This item's own reset: "daily", "weekly" or "none". Null = follows its list (Dailies daily, Weeklies weekly).</summary>
+        [JsonIgnore] public string? Reset { get; set; }
+        /// <summary>When a limited-time event ends (UTC); the item hides from then on (its saved state is kept).</summary>
+        [JsonIgnore] public DateTime? EndsUtc { get; set; }
+        /// <summary>No longer in the app's event definitions: hidden, but its saved state is kept.</summary>
+        [JsonIgnore] public bool Retired { get; set; }
+
+        public bool IsHiddenAt(DateTime nowUtc) => Retired || (EndsUtc is DateTime end && nowUtc >= end);
+    }
+
+    /// <summary>The clock the checklist uses to hide ended events (tests can set it).</summary>
+    public static class ChecklistClock
+    {
+        public static Func<DateTime> UtcNow = () => DateTime.UtcNow;
     }
 
     public sealed class ChecklistSection
     {
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
-        public string Kind { get; set; } = "custom"; // daily | weekly | custom
+        public string Kind { get; set; } = "custom"; // daily | weekly | events | custom
         public string Name { get; set; } = "";
         public List<ChecklistItem> Items { get; set; } = new();
         public bool Hidden { get; set; }
         public bool Collapsed { get; set; }
 
-        public bool IsComplete => Items.Count > 0 && Items.All(i => i.Done);
-        public bool IsCustom => Kind == "custom";
+        /// <summary>The items that show: everything except ended or retired events.</summary>
+        [JsonIgnore] public List<ChecklistItem> LiveItems { get { var now = ChecklistClock.UtcNow(); return Items.Where(i => !i.IsHiddenAt(now)).ToList(); } }
+        [JsonIgnore] public bool IsComplete { get { var live = LiveItems; return live.Count > 0 && live.All(i => i.Done); } }
+        [JsonIgnore] public bool IsCustom => Kind == "custom";
+        /// <summary>The Events list: kept up to date by Wingmate. Items can only be checked and unchecked.</summary>
+        [JsonIgnore] public bool IsManaged => Kind == EventsList.Kind;
     }
 
     public sealed class ChecklistState
@@ -42,23 +63,105 @@ namespace Wingmate.Core
 
         public static readonly string[] DefaultDailies =
         {
-            "Daily attendance reward", "Duty missions", "Daily dungeon runs", "Nightmare",
-            "Transcendence", "Dimensional Invasion", "Shugo Festival",
-        };
+            "Daily attendance reward", "Duty missions", "Daily dungeon runs", "Nightmare", "Transcendence",
+        }; // Dimensional Invasion and Shugo Festival moved to the Events list in 1.0.7
         public static readonly string[] DefaultWeeklies =
         {
             "Raids", "Ascension Trial", "Subjugation", "Exploration",
-            "Use Abyss time", "Arena of Tactics (3 matches)", "Artifact Siege",
+            "Use Abyss time", // Arena of Tactics and Artifact Siege moved to the Events list in 1.0.7
+            "Command Missions (12)", "Abyss Command Missions (20)", "Battlefield (3 wins)", "Subscriber Shop",
         };
+        // Defaults are used for a new list (new install, new character, a missing built-in list) and "Reset to default".
+        // Saved lists only get new items through a one-time, append-only list update (see ApplyListUpdates).
 
-        public static ChecklistSection DefaultSection(string kind) => new()
+        /// <summary>1.0.7 list update: these weeklies are appended once to each character's existing Weeklies.</summary>
+        public const string Update107Weeklies = "weeklies-1.0.7";
+        public static readonly string[] AddedWeeklies107 = { "Command Missions (12)", "Abyss Command Missions (20)", "Battlefield (3 wins)", "Subscriber Shop" };
+
+        /// <summary>One-time list updates already applied to this character (each runs once, so removed items never come back).
+        /// Lists created from the defaults already include them.</summary>
+        public List<string> AppliedUpdates { get; set; } = new();
+
+        /// <summary>Runs the list updates this character hasn't had yet. Append-only: an item is added to the end of the built-in
+        /// Weeklies only when no item with that name (case and spaces ignored) is there; nothing is removed, reordered, renamed,
+        /// checked or unchecked, and hidden lists stay hidden. True when something was recorded (the caller saves).</summary>
+        public bool ApplyListUpdates()
+        {
+            AppliedUpdates ??= new();
+            if (AppliedUpdates.Contains(Update107Weeklies)) return false;
+            var weekly = Sections.FirstOrDefault(x => x.Kind == "weekly");
+            if (weekly != null)
+            {
+                weekly.Items ??= new();
+                foreach (var t in AddedWeeklies107)
+                    if (!weekly.Items.Any(i => string.Equals((i?.Text ?? "").Trim(), t, StringComparison.OrdinalIgnoreCase)))
+                        weekly.Items.Add(new ChecklistItem { Text = t });
+            }
+            AppliedUpdates.Add(Update107Weeklies);
+            return true;
+        }
+
+        /// <summary>1.0.7 list update: event activities move from Dailies/Weeklies into the app-managed Events list.</summary>
+        public const string Update107Events = "events-1.0.7";
+
+        /// <summary>Lists ready for use: Dailies and Weeklies exist, one-time list updates are applied, and the Events list exists
+        /// and matches the app's event definitions. True when a one-time update ran (the caller saves).</summary>
+        public bool PrepareLists()
+        {
+            EnsureBuiltIns();
+            bool changed = ApplyListUpdates();
+            if (MoveEventsOnce()) changed = true;
+            EnsureEvents();
+            return changed;
+        }
+
+        /// <summary>Runs once per character. Each default event item still in Dailies/Weeklies under exactly its default name is
+        /// taken out, and its checked state carries over to the Events entry. Renamed or deleted ones are left alone (a renamed
+        /// copy stays as the user's own item); user-made items and every other item are untouched.</summary>
+        public bool MoveEventsOnce()
+        {
+            AppliedUpdates ??= new();
+            if (AppliedUpdates.Contains(Update107Events)) return false;
+            var events = EnsureEvents();
+            foreach (var (name, fromKind, eventId) in EventsList.MovedIn107)
+            {
+                var from = Sections.FirstOrDefault(x => x.Kind == fromKind);
+                var item = from?.Items.FirstOrDefault(i => i != null && i.Text == name);
+                if (from == null || item == null) continue;
+                from.Items.Remove(item);
+                var target = events.Items.FirstOrDefault(i => i.Id == eventId);
+                if (target != null) target.Done = item.Done;
+            }
+            AppliedUpdates.Add(Update107Events);
+            return true;
+        }
+
+        /// <summary>The Events list (created after Weeklies when missing), synced with the app's event definitions.</summary>
+        public ChecklistSection EnsureEvents()
+        {
+            var ev = Sections.FirstOrDefault(x => x.Kind == EventsList.Kind);
+            if (ev == null)
+            {
+                ev = EventsList.NewSection();
+                int w = Sections.FindIndex(x => x.Kind == "weekly");
+                Sections.Insert(w < 0 ? Sections.Count : w + 1, ev);
+            }
+            else EventsList.Sync(ev);
+            return ev;
+        }
+
+        public static ChecklistSection DefaultSection(string kind) => kind == EventsList.Kind ? EventsList.NewSection() : new()
         {
             Kind = kind,
             Name = kind == "daily" ? "Dailies" : "Weeklies",
             Items = (kind == "daily" ? DefaultDailies : DefaultWeeklies).Select(t => new ChecklistItem { Text = t }).ToList(),
         };
 
-        public static ChecklistState CreateDefault() => new() { Sections = { DefaultSection("daily"), DefaultSection("weekly") } };
+        public static ChecklistState CreateDefault() => new()
+        {
+            Sections = { DefaultSection("daily"), DefaultSection("weekly"), EventsList.NewSection() },
+            AppliedUpdates = { Update107Weeklies, Update107Events }, // the defaults already have the 1.0.7 layout
+        };
 
         /// <summary>"Reset all lists": uncheck every item in every list and show hidden sections. Items are kept.</summary>
         public void ResetAll()
@@ -95,10 +198,7 @@ namespace Wingmate.Core
         {
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                var tmp = path + ".tmp";
-                File.WriteAllText(tmp, JsonSerializer.Serialize(this, Opts), new UTF8Encoding(false));
-                File.Move(tmp, path, true);
+                SafeFile.WriteAtomic(path, JsonSerializer.Serialize(this, Opts));
             }
             catch (Exception ex) { Log.Write("checklist save: " + ex.Message); }
         }
@@ -156,6 +256,10 @@ namespace Wingmate.Core
 
         /// <summary>Clears checkmarks (and un-hides) for each kind whose reset passed since it was last applied.
         /// Covers resets missed while the PC was off. First run just records the boundary. Returns true if anything changed.</summary>
+        /// <summary>When an item resets: its own cadence (Events items), otherwise its list's ("none" for custom lists).</summary>
+        public static string ItemReset(ChecklistSection sec, ChecklistItem item) =>
+            item.Reset ?? (sec.Kind is "daily" or "weekly" ? sec.Kind : "none");
+
         public static bool Apply(ChecklistState s, DateTime dailyBoundary, DateTime weeklyBoundary)
         {
             bool changed = false;
@@ -168,10 +272,12 @@ namespace Wingmate.Core
         {
             if (last == null) { set(boundary); return true; }
             if (boundary <= last.Value) return false; // same period (or clock moved back)
-            foreach (var sec in s.Sections.Where(x => x.Kind == kind))
+            foreach (var sec in s.Sections)
             {
-                foreach (var i in sec.Items) i.Done = false;
-                sec.Hidden = false;
+                bool touched = false;
+                foreach (var i in sec.Items)
+                    if (ItemReset(sec, i) == kind) { i.Done = false; touched = true; }
+                if (sec.Kind == kind || touched) sec.Hidden = false;
             }
             set(boundary);
             return true;
@@ -188,7 +294,8 @@ namespace Wingmate.Core
 
         public static Result CopyInto(ChecklistSection src, ChecklistState target)
         {
-            var dest = target.Sections.FirstOrDefault(s => string.Equals(Norm(s.Name), Norm(src.Name), StringComparison.OrdinalIgnoreCase));
+            if (!ListRules.CanEditItems(src)) return new Result(0, 0, false); // the Events list is not copied
+            var dest = target.Sections.FirstOrDefault(s => ListRules.CanEditItems(s) && string.Equals(Norm(s.Name), Norm(src.Name), StringComparison.OrdinalIgnoreCase));
             bool created = dest == null;
             if (dest == null)
             {
@@ -216,12 +323,13 @@ namespace Wingmate.Core
         {
             ["daily"] = new[] { "Nice work, dailies done!", "That's your dailies, all wrapped up.", "Dailies complete. Go enjoy the rest of your day.", "All done for today. Great job!" },
             ["weekly"] = new[] { "Weeklies complete. That's a solid week!", "Every weekly checked off. Nicely done.", "That's the whole week handled. Well played!" },
+            ["events"] = new[] { "All events done. Nice!", "Every event checked off. Well played!", "That's all the events handled. Great job!" },
             ["custom"] = new[] { "Checklist complete!", "All done. Nice work!", "List complete. Time to make a new one!", "All checked off. Time for a new list!" },
             ["long"] = new[] { "That was a long one. Seriously impressive!", "Every last one done. That's real dedication.", "Wow, you powered through that whole list!", "Big list, fully cleared. You earned a break!" },
         };
 
         public static string PoolFor(ChecklistSection sec, int longThreshold) =>
-            sec.Items.Count >= longThreshold ? "long" : sec.Kind is "daily" or "weekly" ? sec.Kind : "custom";
+            sec.Items.Count >= longThreshold ? "long" : sec.Kind is "daily" or "weekly" or "events" ? sec.Kind : "custom";
 
         private static readonly Dictionary<string, int> LastPick = new();
 
@@ -265,15 +373,82 @@ namespace Wingmate.Core
     public static class CheckedItems
     {
         /// <summary>The items a list shows: all of them with "Show checked items" on, otherwise only the unchecked ones.</summary>
-        public static IEnumerable<ChecklistItem> Visible(ChecklistSection s, bool showChecked) => showChecked ? s.Items : s.Items.Where(i => !i.Done);
+        public static IEnumerable<ChecklistItem> Visible(ChecklistSection s, bool showChecked) => showChecked ? s.LiveItems : s.LiveItems.Where(i => !i.Done);
 
         /// <summary>How many checked items the list is hiding right now.</summary>
-        public static int HiddenCount(ChecklistSection s, bool showChecked) => showChecked ? 0 : s.Items.Count(i => i.Done);
+        public static int HiddenCount(ChecklistSection s, bool showChecked) => showChecked ? 0 : s.LiveItems.Count(i => i.Done);
 
         /// <summary>Just checked: warp this one item out on its own? Not while checked items are shown, and not when it was the last
         /// one (then the list's own celebration plays and takes it away with the list, as before).</summary>
         public static bool WarpOutOnCheck(ChecklistSection s, ChecklistItem item, bool showChecked) =>
             !showChecked && item.Done && s.Items.Contains(item) && !s.IsComplete;
+    }
+
+    /// <summary>"Check all and hide" from a list's right-click menu: checks every unchecked item that shows (ended events are
+    /// left alone), so the list completes and goes away like when its last item is checked by hand. Works on every list,
+    /// the read-only Events list too (it only checks). Each item comes back unchecked at its own reset.</summary>
+    public static class CheckAll
+    {
+        /// <summary>What one "Check all" changed: the list and the items it checked (to undo exactly those).</summary>
+        public sealed record Snapshot(string SectionId, IReadOnlyList<string> CheckedIds, bool WasHidden);
+
+        /// <summary>Checks the unchecked items. Null (and nothing changes) when there is nothing to check.</summary>
+        public static Snapshot? Apply(ChecklistSection sec)
+        {
+            var todo = sec.LiveItems.Where(i => !i.Done).ToList();
+            if (todo.Count == 0) return null;
+            foreach (var i in todo) i.Done = true;
+            return new Snapshot(sec.Id, todo.Select(i => i.Id).ToList(), sec.Hidden);
+        }
+
+        /// <summary>Undo: unchecks the items it checked (items checked before stay checked) and shows the list again.
+        /// False when none of them is still there and checked (e.g. a reset already cleared them).</summary>
+        public static bool Undo(ChecklistState state, Snapshot snap)
+        {
+            var sec = state.Sections.FirstOrDefault(s => s.Id == snap.SectionId);
+            if (sec == null) return false;
+            var ids = new HashSet<string>(snap.CheckedIds);
+            bool any = false;
+            foreach (var i in sec.Items.Where(i => ids.Contains(i.Id) && i.Done)) { i.Done = false; any = true; }
+            if (any) sec.Hidden = snap.WasHidden;
+            return any;
+        }
+
+        /// <summary>The status line before "Undo", e.g. "Checked all in Weeklies · ".</summary>
+        public static string Text(string? listName)
+        {
+            var n = (listName ?? "").Replace('\r', ' ').Replace('\n', ' ').Trim();
+            if (n.Length > UndoCheck.MaxNameLength) n = n[..(UndoCheck.MaxNameLength - 1)].TrimEnd() + "\u2026";
+            return n.Length == 0 ? "Checked all \u00b7 " : $"Checked all in {n} \u00b7 ";
+        }
+    }
+
+    /// <summary>"Checked {item} · Undo": after an item is checked and starts disappearing, the status line offers to undo it for a
+    /// few seconds. Only the most recent check can be undone.</summary>
+    public static class UndoCheck
+    {
+        public const double Seconds = 5;
+        public const int MaxNameLength = 40;
+
+        /// <summary>The status line text before the "Undo" link, e.g. "Checked Daily quests · ".</summary>
+        public static string Text(string? itemText)
+        {
+            var t = (itemText ?? "").Replace('\r', ' ').Replace('\n', ' ').Trim();
+            if (t.Length > MaxNameLength) t = t[..(MaxNameLength - 1)].TrimEnd() + "\u2026";
+            return t.Length == 0 ? "Checked \u00b7 " : $"Checked {t} \u00b7 ";
+        }
+
+        /// <summary>Unchecks the item if it is still in the list and still checked. False (and nothing changes) if it was
+        /// removed, already unchecked (e.g. a reset happened) or belongs to another character.</summary>
+        public static bool Undo(ChecklistState state, string itemId)
+        {
+            var item = state.Sections.SelectMany(s => s.Items).FirstOrDefault(i => i.Id == itemId);
+            if (item == null || !item.Done) return false;
+            item.Done = false;
+            var sec = state.Sections.First(s => s.Items.Contains(item));
+            sec.Hidden = false; // never leave it in a hidden (completed) list
+            return true;
+        }
     }
 
     public static class WarpPicker

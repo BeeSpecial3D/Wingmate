@@ -23,6 +23,8 @@ namespace Wingmate.Core
         [JsonIgnore] public bool ReadOnly { get; private set; }
         /// <summary>True when an old single-checklist file was converted on load (caller saves the new format).</summary>
         [JsonIgnore] public bool Migrated { get; private set; }
+        /// <summary>True when a one-time list update was applied on load (caller saves, so it is recorded and never runs again).</summary>
+        [JsonIgnore] public bool ListsUpdated { get; private set; }
 
         private static readonly JsonSerializerOptions Opts = new() { WriteIndented = true, PropertyNameCaseInsensitive = true };
 
@@ -142,7 +144,7 @@ namespace Wingmate.Core
                 if (CharacterClasses.IsKnown(c.Class)) c.Class = CharacterClasses.Normalize(c.Class); // proper casing
                 else c.Class = (c.Class ?? "").Trim(); // missing (older files) -> ""; anything else is kept as it was
                 c.Sections ??= new List<ChecklistSection>();
-                c.EnsureBuiltIns();
+                if (c.PrepareLists()) ListsUpdated = true; // one-time list updates (1.0.7 weeklies, Events list), then Events synced
             }
             _ = Current; // fixes CurrentId / empty list
             Version = 2;
@@ -164,7 +166,11 @@ namespace Wingmate.Core
         /// defaults are used in memory and the book is ReadOnly so the original is never overwritten.</summary>
         public static ChecklistBook Load(string path, string legacyName)
         {
-            if (!File.Exists(path)) return CreateNew();
+            if (!File.Exists(path))
+            {
+                var fromBak = TryLoadBackup(path); // a save was interrupted between the swap steps
+                return fromBak ?? CreateNew();
+            }
             string text;
             try { text = File.ReadAllText(path, Encoding.UTF8); }
             catch (Exception ex) { Log.Write("checklist read failed (not saving): " + ex.Message); return Failed(); }
@@ -200,10 +206,32 @@ namespace Wingmate.Core
             }
             catch (Exception ex)
             {
+                var fromBak = TryLoadBackup(path); // keeps the broken file as .broken-<time> and puts the .bak back
+                if (fromBak != null) { Log.Write("checklist load failed (" + ex.Message + "): restored the last good copy"); return fromBak; }
                 Log.Write("checklist load failed (keeping the file untouched, not saving): " + ex.Message);
-                try { File.Copy(path, path + ".broken-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"), false); } catch { }
+                try { File.Copy(path, SafeFile.BrokenPath(path), false); } catch { }
                 return Failed();
             }
+        }
+
+        /// <summary>The last good copy (checklist.json.bak), only if it is a valid multi-character file; null otherwise.</summary>
+        private static ChecklistBook? TryLoadBackup(string path)
+        {
+            if (!File.Exists(SafeFile.BackupPath(path))) return null;
+            var (b, from) = SafeFile.Read(path, ParseBook, m => Log.Write("checklist: " + m));
+            return from == SafeFile.Source.Backup ? b : null;
+        }
+
+        /// <summary>A multi-character checklist file, or null when the text isn't one (the main file is then judged unreadable).</summary>
+        private static ChecklistBook? ParseBook(string text)
+        {
+            using var doc = JsonDocument.Parse(text);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object ||
+                !doc.RootElement.EnumerateObject().Any(p => string.Equals(p.Name, "Characters", StringComparison.OrdinalIgnoreCase))) return null;
+            var b = JsonSerializer.Deserialize<ChecklistBook>(text, Opts);
+            if (b == null) return null;
+            b.Normalize();
+            return b;
         }
 
         private static ChecklistBook Failed() { var b = CreateNew(); b.ReadOnly = true; return b; }
@@ -213,10 +241,7 @@ namespace Wingmate.Core
             if (ReadOnly) return;
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                var tmp = path + ".tmp";
-                File.WriteAllText(tmp, JsonSerializer.Serialize(this, Opts), new UTF8Encoding(false));
-                File.Move(tmp, path, true);
+                SafeFile.WriteAtomic(path, JsonSerializer.Serialize(this, Opts)); // temp file, flush, swap; old file -> .bak
             }
             catch (Exception ex) { Log.Write("checklist save: " + ex.Message); }
         }

@@ -30,7 +30,11 @@
                 </Button.ContextMenu>
               </Button>
             </StackPanel>
-            <TextBlock x:Name="ResetText" FontSize="10" Foreground="{DynamicResource Th.faint}" TextTrimming="CharacterEllipsis"/>
+            <DockPanel HorizontalAlignment="Left">
+              <Button x:Name="UndoBtn" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Undo" FontSize="10" Focusable="False"
+                      VerticalAlignment="Center" Visibility="Collapsed" ToolTip="Uncheck it and bring it back" Click="Undo_Click"/>
+              <TextBlock x:Name="ResetText" FontSize="10" Foreground="{DynamicResource Th.faint}" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
           </StackPanel>
           <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
             <Border x:Name="MutedBadge" Visibility="Collapsed" Background="#CC5A6270" CornerRadius="3" Padding="4,0" Margin="4,0,0,0">

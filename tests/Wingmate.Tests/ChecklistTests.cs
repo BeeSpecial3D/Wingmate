@@ -129,7 +129,7 @@ public class ChecklistMiscTests
         Assert.True(l.Sections.Single(x => x.Kind == "daily").Items[0].Done);
         Assert.Single(l.Sections, x => x.Kind == "weekly");
         File.WriteAllText(path, "{ not json");
-        Assert.Equal(2, ChecklistState.Load(path).Sections.Count); // broken file -> defaults
+        Assert.Equal(3, ChecklistState.Load(path).Sections.Count); // broken file -> defaults
         File.Delete(path);
     }
 

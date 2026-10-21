@@ -160,6 +160,13 @@ namespace Wingmate.Core
         /// <summary>Color picker position (added in 1.0.5; older files have none).</summary>
         public double? ColorPickerLeft { get; set; }
         public double? ColorPickerTop { get; set; }
+        /// <summary>True once the welcome guide has been shown (added in 1.0.7). Settings can open it again.</summary>
+        public bool WelcomeShown { get; set; }
+        /// <summary>Custom alert editor position (added in 1.0.7).</summary>
+        public double? CustomAlertLeft { get; set; }
+        public double? CustomAlertTop { get; set; }
+        /// <summary>The user's own alerts (added in 1.0.7), alerted like the built-in events.</summary>
+        public List<CustomAlert> CustomAlerts { get; set; } = new();
         /// <summary>True once a Custom theme exists ("Start from current theme" was used, or it is the theme in use).</summary>
         [JsonIgnore] public bool HasCustomTheme => (CustomColors?.Count ?? 0) > 0 || ThemeKey(Theme) == CustomTheme.Id;
 
@@ -194,15 +201,17 @@ namespace Wingmate.Core
         public static string Dir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Wingmate");
         private static string FilePath => Path.Combine(Dir, "settings.json");
 
-        public static AppSettings Load()
+        public static AppSettings Load() => Load(FilePath);
+
+        /// <summary>Reads settings.json, or its .bak if the main file is missing or unreadable (see <see cref="SafeFile"/>).
+        /// Only when neither can be read do the defaults apply; an unreadable file is kept as settings.json.broken-&lt;time&gt;
+        /// first, so the next save never wipes the user's only copy.</summary>
+        public static AppSettings Load(string path)
         {
-            AppSettings s = new();
-            try
-            {
-                if (File.Exists(FilePath))
-                    s = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath, Encoding.UTF8)) ?? new AppSettings();
-            }
-            catch (Exception ex) { Log.Write("settings: " + ex.Message); }
+            var (loaded, from) = SafeFile.Read(path, t => JsonSerializer.Deserialize<AppSettings>(t), m => Log.Write("settings: " + m));
+            if (loaded == null && File.Exists(path))
+                try { File.Copy(path, SafeFile.BrokenPath(path), false); Log.Write("settings unreadable: kept a copy, using defaults"); } catch { }
+            AppSettings s = loaded ?? new AppSettings();
             if (string.IsNullOrEmpty(s.Region)) s.Region = GuessRegion();
             if (s.SettingsVersion < 3) { s.Opacity = null; s.LauncherOpacity = null; s.SettingsVersion = 3; } // one-time: back to 100% default
             s.Migrate();
@@ -219,6 +228,14 @@ namespace Wingmate.Core
             if (SettingsVersion < 5) MigrateV5();
             if (SettingsVersion < 6) MigrateV6();
             if (SettingsVersion < 7) MigrateV7();
+            if (SettingsVersion < 8) MigrateV8();
+        }
+
+        /// <summary>v8 (1.0.7): the welcome guide and custom alerts. Nothing to convert. <see cref="WelcomeShown"/> stays false
+        /// for people updating, so they see the guide once too (most of what it explains is new to them).</summary>
+        private void MigrateV8()
+        {
+            SettingsVersion = 8;
         }
 
         /// <summary>v7: Custom theme and remembered launcher/Settings positions. Nothing to convert: older files simply have
@@ -236,6 +253,7 @@ namespace Wingmate.Core
                 if (CustomTheme.Find(k) == null || WarnColors.TryParse(CustomColors[k]) == null) CustomColors.Remove(k);
                 else CustomColors[k] = WarnColors.Normalize(CustomColors[k]);
             if (string.IsNullOrWhiteSpace(CustomBase) || CustomBase.Trim().ToLowerInvariant() == CustomTheme.Id) CustomBase = "current";
+            CustomAlerts = Core.CustomAlerts.Sanitize(CustomAlerts);
         }
 
         /// <summary>v6: the single warning colour becomes the selected theme's colour. The untouched old default (red)
@@ -272,13 +290,15 @@ namespace Wingmate.Core
 
         public void Save()
         {
-            try
-            {
-                Directory.CreateDirectory(Dir);
-                File.WriteAllText(FilePath, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
-            }
-            catch (Exception ex) { Log.Write("settings save: " + ex.Message); }
+            SaveTo(FilePath);
             Saved?.Invoke();
+        }
+
+        /// <summary>Writes the settings to <paramref name="path"/> atomically (temp file, then swap; the old file becomes .bak).</summary>
+        public void SaveTo(string path)
+        {
+            try { SafeFile.WriteAtomic(path, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true })); }
+            catch (Exception ex) { Log.Write("settings save: " + ex.Message); }
         }
 
         /// <summary>First run: pick a region from the PC's time zone.</summary>
