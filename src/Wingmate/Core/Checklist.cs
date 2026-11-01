@@ -237,7 +237,7 @@ namespace Wingmate.Core
                 if (!days.Contains(DayNames[(int)date.DayOfWeek])) continue;
                 var local = DateTime.SpecifyKind(date.AddMinutes(startMin), DateTimeKind.Unspecified);
                 if (tz.IsInvalidTime(local)) local = local.AddHours(1);
-                var utc = TimeZoneInfo.ConvertTimeToUtc(local, tz);
+                var utc = TimeZones.ToUtcFirst(local, tz);
                 if (utc <= nowUtc) return utc;
             }
             return nowUtc.AddDays(-7); // no matching day (bad data): treat as long ago

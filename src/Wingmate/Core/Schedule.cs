@@ -85,6 +85,19 @@ namespace Wingmate.Core
             return TimeZoneInfo.Utc;
         }
 
+        /// <summary>Local wall-clock time in <paramref name="tz"/> to UTC. In the repeated hour when clocks go back (an ambiguous
+        /// time), the FIRST occurrence is used (still on daylight time); .NET on its own would pick the second one.</summary>
+        public static DateTime ToUtcFirst(DateTime local, TimeZoneInfo tz)
+        {
+            local = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
+            if (tz.IsAmbiguousTime(local))
+            {
+                var offset = tz.GetAmbiguousTimeOffsets(local).Max(); // the larger offset = the earlier moment
+                return DateTime.SpecifyKind(local - offset, DateTimeKind.Utc);
+            }
+            return TimeZoneInfo.ConvertTimeToUtc(local, tz);
+        }
+
         /// <summary>Short label for the user's own zone, e.g. "EDT". Falls back to "local".</summary>
         public static string LocalAbbrev(DateTime utc)
         {
@@ -150,7 +163,7 @@ namespace Wingmate.Core
                         var local = DateTime.SpecifyKind(date.AddMinutes(m), DateTimeKind.Unspecified);
                         if (!tz.IsInvalidTime(local))
                         {
-                            var st = TimeZoneInfo.ConvertTimeToUtc(local, tz);
+                            var st = TimeZones.ToUtcFirst(local, tz);
                             list.Add(new Occurrence(ev, st, st.AddMinutes(dur)));
                         }
                         if (rep <= 0) break;
