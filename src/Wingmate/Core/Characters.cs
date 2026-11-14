@@ -144,7 +144,7 @@ namespace Wingmate.Core
                 if (CharacterClasses.IsKnown(c.Class)) c.Class = CharacterClasses.Normalize(c.Class); // proper casing
                 else c.Class = (c.Class ?? "").Trim(); // missing (older files) -> ""; anything else is kept as it was
                 c.Sections ??= new List<ChecklistSection>();
-                if (c.PrepareLists()) ListsUpdated = true; // one-time list updates (1.0.7 weeklies, Events list), then Events synced
+                if (c.PrepareLists()) ListsUpdated = true; // one-time list updates (1.0.7/1.0.9 weeklies, Events list), then Events synced
             }
             _ = Current; // fixes CurrentId / empty list
             Version = 2;

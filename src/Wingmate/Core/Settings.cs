@@ -167,6 +167,9 @@ namespace Wingmate.Core
         public double? CustomAlertTop { get; set; }
         /// <summary>The user's own alerts (added in 1.0.7), alerted like the built-in events.</summary>
         public List<CustomAlert> CustomAlerts { get; set; } = new();
+        /// <summary>Free code ids the user has already seen and closed (added in 1.0.9). Only ever added to, so a code never
+        /// pops up twice; Settings can still show the current codes again.</summary>
+        public List<string> DismissedCoupons { get; set; } = new();
         /// <summary>True once a Custom theme exists ("Start from current theme" was used, or it is the theme in use).</summary>
         [JsonIgnore] public bool HasCustomTheme => (CustomColors?.Count ?? 0) > 0 || ThemeKey(Theme) == CustomTheme.Id;
 
@@ -229,6 +232,16 @@ namespace Wingmate.Core
             if (SettingsVersion < 6) MigrateV6();
             if (SettingsVersion < 7) MigrateV7();
             if (SettingsVersion < 8) MigrateV8();
+            if (SettingsVersion < 9) MigrateV9();
+        }
+
+        /// <summary>v9 (1.0.9): the Daily reset alert, on for everyone. Append-only: adds the one choice if it is missing and
+        /// changes nothing else (an existing choice, made in a newer or test build, is kept as it is).</summary>
+        private void MigrateV9()
+        {
+            AlertChoices ??= new();
+            if (!AlertChoices.ContainsKey(ResetAlerts.DailyId)) AlertChoices[ResetAlerts.DailyId] = true;
+            SettingsVersion = 9;
         }
 
         /// <summary>v8 (1.0.7): the welcome guide and custom alerts. Nothing to convert. <see cref="WelcomeShown"/> stays false
@@ -254,6 +267,8 @@ namespace Wingmate.Core
                 else CustomColors[k] = WarnColors.Normalize(CustomColors[k]);
             if (string.IsNullOrWhiteSpace(CustomBase) || CustomBase.Trim().ToLowerInvariant() == CustomTheme.Id) CustomBase = "current";
             CustomAlerts = Core.CustomAlerts.Sanitize(CustomAlerts);
+            AlertChoices ??= new();
+            DismissedCoupons = Coupons.Sanitize(DismissedCoupons);
         }
 
         /// <summary>v6: the single warning colour becomes the selected theme's colour. The untouched old default (red)

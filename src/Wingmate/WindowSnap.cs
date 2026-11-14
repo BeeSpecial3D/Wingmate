@@ -16,7 +16,10 @@ namespace Wingmate
         [DllImport("user32.dll")] private static extern IntPtr MonitorFromRect(ref RECT r, uint flags);
         [DllImport("user32.dll")] private static extern bool GetMonitorInfo(IntPtr m, ref MONITORINFO mi);
         [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
-        private const uint MONITOR_DEFAULTTONEAREST = 2, SWP_NOSIZE = 1, SWP_NOZORDER = 4, SWP_NOACTIVATE = 0x10;
+        [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
+        [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr h, uint flags);
+        [DllImport("user32.dll")] private static extern IntPtr MonitorFromPoint(POINT p, uint flags);
+        private const uint MONITOR_DEFAULTTOPRIMARY = 1, MONITOR_DEFAULTTONEAREST = 2, SWP_NOSIZE = 1, SWP_NOZORDER = 4, SWP_NOACTIVATE = 0x10;
 
         /// <summary>Moves the window (and narrows it if allowed and wider than the screen) so it is fully on screen.</summary>
         public static void Clamp(Window w, bool canNarrow = false)
@@ -46,6 +49,30 @@ namespace Wingmate
                 if (x != r.L || y != r.T) SetWindowPos(h, IntPtr.Zero, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
             }
             catch (Exception ex) { Core.Log.Write("snap: " + ex.Message); }
+        }
+
+        /// <summary>Centres the window in the work area of the monitor <paramref name="onMonitorOf"/> is on (when it is showing),
+        /// otherwise of the primary monitor. Physical pixels via Win32, so it is right at any DPI scaling.</summary>
+        public static void CenterOnScreen(Window w, Window? onMonitorOf = null)
+        {
+            try
+            {
+                var h = new WindowInteropHelper(w).Handle;
+                if (h == IntPtr.Zero || !GetWindowRect(h, out var r)) return;
+                IntPtr mon = IntPtr.Zero;
+                if (onMonitorOf != null && onMonitorOf.IsVisible && onMonitorOf.WindowState != WindowState.Minimized)
+                {
+                    var rh = new WindowInteropHelper(onMonitorOf).Handle;
+                    if (rh != IntPtr.Zero) mon = MonitorFromWindow(rh, MONITOR_DEFAULTTONEAREST);
+                }
+                if (mon == IntPtr.Zero) mon = MonitorFromPoint(new POINT { X = 0, Y = 0 }, MONITOR_DEFAULTTOPRIMARY);
+                var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+                if (!GetMonitorInfo(mon, ref mi)) return;
+                var wa = mi.rcWork;
+                var (x, y) = Core.Placement.Center(wa.L, wa.T, wa.R, wa.B, r.R - r.L, r.B - r.T);
+                if (x != r.L || y != r.T) SetWindowPos(h, IntPtr.Zero, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            catch (Exception ex) { Core.Log.Write("center: " + ex.Message); }
         }
 
         /// <summary>Puts a window at a saved position (DIPs) if it is roughly on the virtual desktop; false = no usable position

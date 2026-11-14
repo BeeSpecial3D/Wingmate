@@ -284,6 +284,13 @@ namespace Wingmate
                 tip: "The launcher's \u00D7 asks before quitting Wingmate");
             Small("Reset window positions", () => App.Current.ResetAllPositions(), og);
 
+            Group("FREE CODES");
+            Add(new TextBlock { Text = "Free Aion 2 coupon codes. Wingmate shows each new one once, until it expires.", FontSize = 11,
+                TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 2) }.Ref(TextBlock.ForegroundProperty, "muted"));
+            Small("Show free codes", () => App.Current.ShowCurrentCodes(), Grid2(),
+                label: () => App.Current.CurrentCodeCount is int n && n > 0 ? $"Show free codes ({n})" : "Show free codes")
+                .ToolTip = "See the codes that still work, with a Copy button and where to type them in game";
+
             // ---------------------------------------------------------------- Appearance
             Page("Appearance");
             Group("TEXT");

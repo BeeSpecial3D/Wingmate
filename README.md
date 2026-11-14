@@ -5,7 +5,11 @@ A free companion app for **Aion 2** by BeeSpecial3D.
 ![Wingmate in Aion 2: Abyss alerts at the top, launcher and Settings on the right, checklist bottom left](docs/images/overview.jpg)
 
 ### Abyss and event alerts
-A small countdown overlay for the Abyss and server events (Artifact Siege, Nahma, Rift portals, Arena and more), with spoken warnings from Bella before each one starts. NA and EU times.
+A small countdown overlay for the Abyss and server events (Artifact Siege on Thursday and Saturday, Nahma, Argo the Spirit King, Rift portals, Arena and more), with spoken warnings from Bella before each one starts. NA and EU times.
+
+**Daily reset alert:** Bella tells you before the daily reset, at the same time your Dailies reset in the checklist. On the weekly reset day you hear just "Weekly reset". It's on by default. Turn it off in **Settings > Alerts** (General alerts) or the alerts window's right-click menu.
+
+**Free codes:** when there's a free Aion 2 coupon code, Wingmate shows it once in a small pop-up: the code with a **Copy** button, what it gives, when it expires (in your own time) and where to type it in game (**Settings > Miscellaneous > Account > Enter Coupon**). Expired codes never show. To see the current codes again, use **Show free codes** in **Settings > General**. Wingmate checks this repo for new codes, so new ones can show up without an update.
 
 **Custom alerts:** add your own in **Settings > Alerts > Add custom alert…**: give it a name, a time, the days it runs and, if you like, a repeat every few hours. Custom alerts count down and speak like the built-in events. You can turn one off, edit it or delete it at any time.
 
@@ -16,7 +20,7 @@ Daily and weekly lists that reset on their own, an Events list, plus your own cu
 
 **Events list:** Shugo Festival, Dimensional Invasion, Artifact Siege, Arena of Tactics and limited-time events such as the Spiritstone shop event. Wingmate keeps this list up to date for you: each item resets on its own schedule (daily or weekly), and limited-time events hide by themselves when they end. You can check and uncheck items, but you can't edit this list. If you renamed one of these items in your own Dailies or Weeklies before, your copy stays where it is.
 
-**New weeklies:** Command Missions (12), Abyss Command Missions (20), Battlefield (3 wins) and Subscriber Shop. They're added once to existing Weeklies lists. Items you already have aren't added twice, and anything you delete later doesn't come back.
+**New weeklies:** Command Missions (12), Abyss Command Missions (20), Battlefield (3 wins), Subscriber Shop, Shugo Festival Season Mission, Transcendence Season Missions (3) and Chaotic Outer Reshanta (3h, lv. 45). They're added once to existing Weeklies lists. Items you already have aren't added twice, and anything you delete later doesn't come back.
 
 Checked items disappear one at a time as you check them, and checking the last one sets off the list celebration. Right after you check an item, **Checked … · Undo** shows for a few seconds: click **Undo** if you misclicked. Checked items aren't lost: the resets (and **Reset all lists**) bring them back unchecked. Turn on **Show checked items** in the checklist's right-click menu to see checked items again (green check, struck through) and click one to uncheck it.
 

@@ -81,7 +81,7 @@ public class CustomThemeTests
         var json = "{\"Region\":\"NA_East\",\"Theme\":\"honey\",\"SettingsVersion\":6,\"ThemeWarnColor\":{\"honey\":\"#123456\"},\"ThemeOpacity\":{\"honey\":0.9},\"Left\":100,\"Top\":50}";
         var s = JsonSerializer.Deserialize<AppSettings>(json)!;
         s.Migrate();
-        Assert.Equal(8, s.SettingsVersion); // v8 (1.0.7) adds nothing to convert
+        Assert.Equal(9, s.SettingsVersion); // v8 (1.0.7) adds nothing to convert; v9 (1.0.9) only adds the Daily reset choice
         Assert.Equal("honey", s.Theme);
         Assert.Equal("#123456", s.WarnColorFor("honey"));
         Assert.Equal(0.9, s.OpacityFor("honey"), 3);

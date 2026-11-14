@@ -215,7 +215,7 @@ namespace Wingmate.Tests
             Xunit.Assert.Equal(3, s.WarnMinutes);
             var t = new Wingmate.Core.AppSettings { SettingsVersion = 3, LeadMinutes = new() };
             t.Migrate();
-            Xunit.Assert.Empty(t.AlertChoices); Xunit.Assert.Equal(5, t.WarnMinutes);
+            Xunit.Assert.Equal(new[] { "daily_reset" }, t.AlertChoices.Keys); Xunit.Assert.Equal(5, t.WarnMinutes); // PvE stays unset; v9 adds only the Daily reset choice
         }
 
         [Xunit.Fact]

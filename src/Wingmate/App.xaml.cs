@@ -37,6 +37,8 @@ namespace Wingmate
         /// <summary>Every character's checklist (checklist.json). Loaded once at startup.</summary>
         public static ChecklistBook Book { get; private set; } = ChecklistBook.CreateNew();
         public static ScheduleProvider Schedule { get; } = new();
+        /// <summary>Free Aion 2 coupon codes (bundled list, updated from GitHub when online).</summary>
+        public static CouponProvider Codes { get; } = new();
         public static new App Current => (App)Application.Current;
 
         /// <summary>Monotonic start mark (Stopwatch), taken when the App type is first touched at process start.</summary>
@@ -92,8 +94,11 @@ namespace Wingmate
             try { Schedule.LoadLocal(); }
             catch (Exception ex) { Log.Write(ex.ToString()); ConfirmDialog.Info(null, "Wingmate", ex.Message); Shutdown(); return; }
             _ = Schedule.RefreshOnlineAsync();
+            Codes.LoadLocal(); // never throws: a bad or missing list just means no code pop-up
+            Codes.Changed += () => Dispatcher.BeginInvoke(new Action(MaybeShowNewCodes), DispatcherPriority.ApplicationIdle);
+            _ = Codes.RefreshOnlineAsync();
             _onlineTimer = new DispatcherTimer { Interval = TimeSpan.FromHours(6) };
-            _onlineTimer.Tick += async (s, a) => await Schedule.RefreshOnlineAsync();
+            _onlineTimer.Tick += async (s, a) => { await Schedule.RefreshOnlineAsync(); await Codes.RefreshOnlineAsync(); };
             _onlineTimer.Start();
 
             CreateTray();
@@ -101,6 +106,7 @@ namespace Wingmate
             catch (Exception ex) { Log.Write("hotkey: " + ex.Message); }
             OpenStartupWindows();
             if (!Settings.WelcomeShown) Dispatcher.BeginInvoke(new Action(() => ShowWelcome()), DispatcherPriority.ApplicationIdle); // once (new users and updaters)
+            Dispatcher.BeginInvoke(new Action(MaybeShowNewCodes), DispatcherPriority.ApplicationIdle); // after the welcome guide, if that shows
             if (!Release.DataIsSeparateFromInstall(AppSettings.Dir, AppContext.BaseDirectory))
                 Log.Write("warning: data folder and program folder overlap: " + AppContext.BaseDirectory);
             Updates.Changed += OnUpdatesChanged;
@@ -389,6 +395,7 @@ namespace Wingmate
             if (_settings != null) FontScaler.Apply(_settings);
             if (_customColors != null) FontScaler.Apply(_customColors);
             if (_updatePopup != null) _updatePopup.ApplyFontScale();
+            if (_codesPopup != null) _codesPopup.ApplyFontScale();
         }
 
         public void SetFontScale(double k) { Settings.FontScale = k; Settings.Save(); }
@@ -446,12 +453,54 @@ namespace Wingmate
             if (_welcome == null)
             {
                 _welcome = new WelcomeWindow((Window?)_settings ?? _launcher);
-                _welcome.Closed += (s, a) => _welcome = null;
+                _welcome.Closed += (s, a) =>
+                {
+                    _welcome = null;
+                    if (_codesAfterWelcome) { _codesAfterWelcome = false; Dispatcher.BeginInvoke(new Action(MaybeShowNewCodes), DispatcherPriority.ApplicationIdle); }
+                };
             }
             _welcome.ShowPage(page);
             _welcome.Show();
             _welcome.Activate();
             if (!Settings.WelcomeShown) { Settings.WelcomeShown = true; Settings.Save(); }
+        }
+
+        // ------------------------------------------------------------ free codes
+        private CouponPopup? _codesPopup;
+        private bool _codesAfterWelcome;
+
+        /// <summary>Shows codes the user hasn't seen yet (once each; expired ones never). Waits for the welcome guide to close.
+        /// Closing the pop-up (Got it or ×) remembers those codes, so they don't come back on their own.</summary>
+        public void MaybeShowNewCodes()
+        {
+            if (Exiting || _codesPopup != null) return;
+            if (_welcome != null) { _codesAfterWelcome = true; return; }
+            var fresh = Core.Coupons.New(Codes.Current, Settings.DismissedCoupons, DateTime.UtcNow);
+            if (fresh.Count > 0) ShowCodesPopup(fresh, fromSettings: false);
+        }
+
+        /// <summary>Settings' "Show free codes": every code that still works (seen or not), or a short "none right now".</summary>
+        public void ShowCurrentCodes()
+        {
+            if (Exiting) return;
+            _codesPopup?.Close();
+            ShowCodesPopup(Core.Coupons.Active(Codes.Current, DateTime.UtcNow), fromSettings: true);
+        }
+
+        public int CurrentCodeCount => Core.Coupons.Active(Codes.Current, DateTime.UtcNow).Count;
+
+        private void ShowCodesPopup(System.Collections.Generic.IReadOnlyList<CouponCode> codes, bool fromSettings)
+        {
+            var anchor = fromSettings ? (Window?)_settings ?? _launcher : _launcher;
+            var p = new CouponPopup(anchor, codes, fromSettings);
+            p.Closed += (s, a) =>
+            {
+                if (_codesPopup == p) _codesPopup = null;
+                Settings.DismissedCoupons ??= new();
+                if (Core.Coupons.Remember(Settings.DismissedCoupons, p.ShownIds)) Settings.Save();
+            };
+            _codesPopup = p;
+            p.Show();
         }
 
         /// <summary>Settings' "Edit custom colors…": closes the Custom colors window if it is open (its position is saved

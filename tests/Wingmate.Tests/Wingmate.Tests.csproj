@@ -24,6 +24,9 @@
     <Compile Include="..\..\src\Wingmate\Core\CustomAlerts.cs" />
     <Compile Include="..\..\src\Wingmate\Core\WelcomeGuide.cs" />
     <Compile Include="..\..\src\Wingmate\Core\EventsList.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\ResetAlerts.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\Coupons.cs" />
+    <Compile Include="..\..\src\Wingmate\Core\Placement.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />

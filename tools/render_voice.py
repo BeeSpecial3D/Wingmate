@@ -7,8 +7,8 @@ from kokoro_onnx import Kokoro
 CLIPS = {
     # event names (keys match "voice" in schedule.json)
     "siege": "Artifact Siege", "siege_bosses": "Siege bosses", "nahma": "Guardian Lord Nahma",
-    "watcher_kaira": "Watcher Kaira", "rift": "Rift portals", "arena": "Arena of Tactics",
-    "weekly_reset": "Weekly reset", "shugo": "Shugo Festival", "invasion": "Dimensional Invasion",
+    "watcher_kaira": "Watcher Kaira", "argo": "Argo, the Spirit King", "rift": "Rift portals", "arena": "Arena of Tactics",
+    "weekly_reset": "Weekly reset", "daily_reset": "Daily reset", "shugo": "Shugo Festival", "invasion": "Dimensional Invasion",
     "generic": "Abyss event",
     # phrases
     "in_1": "starts in one minute.", "in_2": "starts in two minutes.", "in_3": "starts in three minutes.",

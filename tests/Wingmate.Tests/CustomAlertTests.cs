@@ -159,7 +159,7 @@ public class SettingsV8Tests : IDisposable
     [Fact] public void Update_From107Earlier_SeesWelcomeOnce_KeepsEverything()
     {
         var s = LoadJson("{\"SettingsVersion\":7,\"Theme\":\"honey\",\"WarnMinutes\":7,\"FontScale\":1.15,\"Region\":\"EU\",\"AlertChoices\":{\"siege\":false}}");
-        Assert.Equal(8, s.SettingsVersion);
+        Assert.Equal(9, s.SettingsVersion); // through v8 (welcome) and v9 (Daily reset alert)
         Assert.False(s.WelcomeShown);
         Assert.Empty(s.CustomAlerts);
         Assert.Equal("honey", s.Theme); Assert.Equal(7, s.WarnMinutes); Assert.Equal(1.15, s.FontScale, 3); Assert.Equal("EU", s.Region);
@@ -169,7 +169,7 @@ public class SettingsV8Tests : IDisposable
     [Fact] public void NewInstall_SeesWelcome()
     {
         var s = AppSettings.Load(Path.Combine(_dir, "none.json"));
-        Assert.False(s.WelcomeShown); Assert.Equal(8, s.SettingsVersion);
+        Assert.False(s.WelcomeShown); Assert.Equal(9, s.SettingsVersion);
     }
 
     [Fact] public void WelcomeFlag_AndCustomAlerts_RoundTrip_ThroughSafeSave()

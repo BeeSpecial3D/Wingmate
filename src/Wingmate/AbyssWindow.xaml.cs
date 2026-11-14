@@ -178,6 +178,7 @@ namespace Wingmate
                 TitleText.Text = $"Abyss alerts · {region.Name} · times in {TimeZones.LocalAbbrev(now)}";
                 TitleText.ToolTip = $"Schedule {App.Schedule.Current.Version} ({App.Schedule.SourceLabel}). Drag to move, grip = width, right-click for options.";
                 var occ = ScheduleEngine.Occurrences(CustomAlerts.With(App.Schedule.Current, S.CustomAlerts), region, Include, now); // built-in events plus the custom alerts that are on
+                occ = ResetAlerts.DropDailyAtWeekly(occ); // weekly reset day: one line, not two
                 var (mode, lines) = AbyssDisplay.Build(occ, now);
                 if (lines.Count == 0)
                 {

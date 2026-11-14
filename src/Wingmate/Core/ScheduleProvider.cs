@@ -7,7 +7,8 @@ using System.Threading.Tasks;
 
 namespace Wingmate.Core
 {
-    /// <summary>Schedule = newest of bundled copy, local cache, and the online file (raw GitHub).</summary>
+    /// <summary>Schedule = newest of bundled copy, local cache, and the online file (raw GitHub). The Daily reset alert is
+    /// added to whichever is used (<see cref="ResetAlerts.WithDailyReset"/>).</summary>
     public sealed class ScheduleProvider
     {
         public const string OnlineUrl = "https://raw.githubusercontent.com/BeeSpecial3D/Wingmate/main/schedule/schedule.json";
@@ -30,14 +31,14 @@ namespace Wingmate.Core
             using var st = Assembly.GetExecutingAssembly().GetManifestResourceStream("schedule.json")!;
             using var rd = new StreamReader(st, Encoding.UTF8);
             var bundled = ScheduleParser.TryParse(rd.ReadToEnd(), out var err) ?? throw new InvalidOperationException("Built-in schedule is invalid: " + err);
-            Current = bundled; SourceLabel = "built-in";
+            Current = ResetAlerts.WithDailyReset(bundled); SourceLabel = "built-in";
             try
             {
                 if (File.Exists(CachePath))
                 {
                     var cache = ScheduleParser.TryParse(File.ReadAllText(CachePath, Encoding.UTF8), out var cerr);
                     if (cache == null) Log.Write("schedule cache ignored: " + cerr);
-                    else if (string.CompareOrdinal(cache.Version, bundled.Version) >= 0) { Current = cache; SourceLabel = "saved online copy"; }
+                    else if (string.CompareOrdinal(cache.Version, bundled.Version) >= 0) { Current = ResetAlerts.WithDailyReset(cache); SourceLabel = "saved online copy"; }
                 }
             }
             catch (Exception ex) { Log.Write("schedule cache: " + ex.Message); }
@@ -52,7 +53,7 @@ namespace Wingmate.Core
                 if (s == null) { Log.Write("online schedule ignored: " + err); return; }
                 if (string.CompareOrdinal(s.Version, Current.Version) < 0) return;
                 SafeFile.WriteAtomic(CachePath, json, keepBackup: false); // a cache: whole or old, no .bak needed
-                Current = s; SourceLabel = "online";
+                Current = ResetAlerts.WithDailyReset(s); SourceLabel = "online";
                 Changed?.Invoke();
             }
             catch (Exception ex) { Log.Write("online schedule not available (using " + SourceLabel + "): " + ex.Message); }

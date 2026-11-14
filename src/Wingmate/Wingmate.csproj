@@ -9,7 +9,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>Wingmate</AssemblyName>
     <RootNamespace>Wingmate</RootNamespace>
-    <Version>1.0.8</Version>
+    <Version>1.0.9</Version>
     <Product>Wingmate</Product>
     <Company>BeeSpecial3D</Company>
     <Description>Wingmate, a companion for Aion 2</Description>
@@ -33,6 +33,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Assets\voice\*.wav" LogicalName="voice.%(Filename).wav" />
     <EmbeddedResource Include="..\..\schedule\schedule.json" LogicalName="schedule.json" />
+    <EmbeddedResource Include="..\..\schedule\coupons.json" LogicalName="coupons.json" />
     <EmbeddedResource Include="..\..\assets\themes\themes.json" LogicalName="themes.json" />
     <Resource Include="Assets\wingmate-icon.png" />
     <Resource Include="Assets\home-icon.png" />

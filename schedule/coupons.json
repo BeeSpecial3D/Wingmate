@@ -1,0 +1,19 @@
+{
+  "formatVersion": 1,
+  "version": "2026-11-14.1",
+  "updated": "2026-11-14T14:00:00-05:00",
+  "_about": "Free Aion 2 coupon codes shown by Wingmate (1.0.9 and later), once each, until they expire. Times are ISO 8601 with a zone. Raise 'version' whenever this file changes so the app picks it up.",
+  "codes": [
+    {
+      "id": "DAEVADRESSUP",
+      "code": "DAEVADRESSUP",
+      "rewards": [
+        "Skin Chest (10 times) x3",
+        "Appearance Change Voucher (7 Days) x1",
+        "Customization Voucher x5"
+      ],
+      "note": "Once per account. Works on all servers.",
+      "expires": "2026-11-25T06:30:00Z"
+    }
+  ]
+}

@@ -70,6 +70,7 @@ namespace Wingmate.Core
             "Raids", "Ascension Trial", "Subjugation", "Exploration",
             "Use Abyss time", // Arena of Tactics and Artifact Siege moved to the Events list in 1.0.7
             "Command Missions (12)", "Abyss Command Missions (20)", "Battlefield (3 wins)", "Subscriber Shop",
+            "Shugo Festival Season Mission", "Transcendence Season Missions (3)", "Chaotic Outer Reshanta (3h, lv. 45)",
         };
         // Defaults are used for a new list (new install, new character, a missing built-in list) and "Reset to default".
         // Saved lists only get new items through a one-time, append-only list update (see ApplyListUpdates).
@@ -77,6 +78,13 @@ namespace Wingmate.Core
         /// <summary>1.0.7 list update: these weeklies are appended once to each character's existing Weeklies.</summary>
         public const string Update107Weeklies = "weeklies-1.0.7";
         public static readonly string[] AddedWeeklies107 = { "Command Missions (12)", "Abyss Command Missions (20)", "Battlefield (3 wins)", "Subscriber Shop" };
+
+        /// <summary>1.0.9 list update: these weeklies are appended once to each character's existing Weeklies.</summary>
+        public const string Update109Weeklies = "weeklies-1.0.9";
+        public static readonly string[] AddedWeeklies109 =
+        {
+            "Shugo Festival Season Mission", "Transcendence Season Missions (3)", "Chaotic Outer Reshanta (3h, lv. 45)",
+        };
 
         /// <summary>One-time list updates already applied to this character (each runs once, so removed items never come back).
         /// Lists created from the defaults already include them.</summary>
@@ -88,16 +96,24 @@ namespace Wingmate.Core
         public bool ApplyListUpdates()
         {
             AppliedUpdates ??= new();
-            if (AppliedUpdates.Contains(Update107Weeklies)) return false;
+            bool changed = false;
+            if (AppendWeeklies(Update107Weeklies, AddedWeeklies107)) changed = true;
+            if (AppendWeeklies(Update109Weeklies, AddedWeeklies109)) changed = true;
+            return changed;
+        }
+
+        bool AppendWeeklies(string updateId, string[] added)
+        {
+            if (AppliedUpdates.Contains(updateId)) return false;
             var weekly = Sections.FirstOrDefault(x => x.Kind == "weekly");
             if (weekly != null)
             {
                 weekly.Items ??= new();
-                foreach (var t in AddedWeeklies107)
+                foreach (var t in added)
                     if (!weekly.Items.Any(i => string.Equals((i?.Text ?? "").Trim(), t, StringComparison.OrdinalIgnoreCase)))
                         weekly.Items.Add(new ChecklistItem { Text = t });
             }
-            AppliedUpdates.Add(Update107Weeklies);
+            AppliedUpdates.Add(updateId);
             return true;
         }
 
@@ -160,7 +176,7 @@ namespace Wingmate.Core
         public static ChecklistState CreateDefault() => new()
         {
             Sections = { DefaultSection("daily"), DefaultSection("weekly"), EventsList.NewSection() },
-            AppliedUpdates = { Update107Weeklies, Update107Events }, // the defaults already have the 1.0.7 layout
+            AppliedUpdates = { Update107Weeklies, Update107Events, Update109Weeklies }, // the defaults already have these updates
         };
 
         /// <summary>"Reset all lists": uncheck every item in every list and show hidden sections. Items are kept.</summary>
