@@ -1,19 +1,27 @@
 {
   "formatVersion": 1,
-  "version": "2026-11-14.1",
-  "updated": "2026-11-14T14:00:00-05:00",
+  "version": "2026-11-25.1",
+  "updated": "2026-11-25T10:00:00-05:00",
   "_about": "Free Aion 2 coupon codes shown by Wingmate (1.0.9 and later), once each, until they expire. Times are ISO 8601 with a zone. Raise 'version' whenever this file changes so the app picks it up.",
   "codes": [
     {
-      "id": "DAEVADRESSUP",
-      "code": "DAEVADRESSUP",
+      "id": "THANKSFROMAION2",
+      "code": "THANKSFROMAION2",
       "rewards": [
-        "Skin Chest (10 times) x3",
-        "Appearance Change Voucher (7 Days) x1",
-        "Customization Voucher x5"
+        "Sync Stone (Unique) x10",
+        "Soul Codex: Reset x15",
+        "Growth Pet Chest x100",
+        "Skin Chest (10 times) x10",
+        "Odyle Energy x5",
+        "Appearance Change Voucher (30 Days) x1",
+        "Customization Voucher x3",
+        "Instant Clear Ticket: Nightmare x20",
+        "Battle Enhance Scroll x20",
+        "Life Crystal x100",
+        "Superior Speed, Courage and Benediction Scrolls x20 each"
       ],
-      "note": "Once per account. Works on all servers.",
-      "expires": "2026-11-25T06:30:00Z"
+      "note": "Korea Game Awards thank-you gift. Once per account. Works on all servers. Items are bound.",
+      "expires": "2027-03-03T07:00:00Z"
     }
   ]
 }
