@@ -22,4 +22,12 @@ public class PlacementTests
         Assert.Contains("WindowSnap.CenterOnScreen(this, _monitorOf)", src);
         Assert.DoesNotContain("CenterOwner", src);
     }
+
+    [Fact] public void UpdatePopup_OpensCentered_NotOnItsOwner()
+    {
+        var src = File.ReadAllText(Path.Combine("..", "..", "..", "..", "..", "src", "Wingmate", "UpdatePopup.cs"));
+        Assert.Contains("WindowSnap.CenterOnScreen(this, _monitorOf)", src);
+        Assert.DoesNotContain("CenterOwner", src);
+        Assert.DoesNotContain("CenterScreen", src);
+    }
 }

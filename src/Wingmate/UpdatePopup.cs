@@ -11,9 +11,9 @@ using Wingmate.Core;
 namespace Wingmate
 {
     /// <summary>Small themed "Wingmate X is available" pop-up with Update now / Later. Topmost but no-activate (a tool window
-    /// that never takes focus, so a game keeps keyboard focus); centred on the launcher when it is open, else on the primary
-    /// screen. "Update now" downloads with progress, then applies and restarts; errors show a friendly message and Retry.
-    /// In preview mode nothing is downloaded or changed: it only plays the states.</summary>
+    /// that never takes focus, so a game keeps keyboard focus). Opens in the centre of the screen (the monitor Wingmate is on,
+    /// else the primary one). "Update now" downloads with progress, then applies and restarts; errors show a friendly message
+    /// and Retry. In preview mode nothing is downloaded or changed: it only plays the states.</summary>
     public sealed class UpdatePopup : Window
     {
         private readonly Func<Action<int>, CancellationToken, Task>? _download;
@@ -24,6 +24,8 @@ namespace Wingmate
         private readonly Button _now, _later;
         private CancellationTokenSource? _cts;
         private bool _busy;
+        private readonly Window? _monitorOf;
+        private bool _placed;
 
         /// <param name="download">Downloads the update (progress 0-100); throws on failure. Null in preview.</param>
         /// <param name="apply">Saves everything, applies the update and restarts; false if it could not start. Null in preview.</param>
@@ -43,8 +45,10 @@ namespace Wingmate
             SizeToContent = SizeToContent.WidthAndHeight; Width = double.NaN; MaxWidth = 360;
             FontFamily = new FontFamily("Segoe UI"); FontSize = 12; Foreground = Th.Br("text");
             UseLayoutRounding = true; TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
-            if (anchor != null && anchor.IsVisible && anchor.WindowState != WindowState.Minimized) { Owner = anchor; WindowStartupLocation = WindowStartupLocation.CenterOwner; }
-            else WindowStartupLocation = WindowStartupLocation.CenterScreen; // primary screen
+            // always opens in the centre of the screen (the monitor Wingmate is on, else the primary one); see CenterOnScreen below
+            if (anchor != null && anchor.IsVisible && anchor.WindowState != WindowState.Minimized) Owner = anchor; // stays above it
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            _monitorOf = anchor;
 
             var root = FontScaler.Grow(new DockPanel { Width = 300 }); // wider with bigger text
             var head = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
@@ -89,7 +93,9 @@ namespace Wingmate
                 if (h != IntPtr.Zero) Native.OverlayStyles(h); // tool window + no-activate: clicks work, focus stays with the game
             };
             ApplyFontScale();
-            Loaded += (s, e) => { var h = new WindowInteropHelper(this).Handle; if (h != IntPtr.Zero) Native.KeepTopmost(h); WindowSnap.Clamp(this); };
+            Loaded += (s, e) => { var h = new WindowInteropHelper(this).Handle; if (h != IntPtr.Zero) Native.KeepTopmost(h); WindowSnap.CenterOnScreen(this, _monitorOf); };
+            // the size is final once the content has rendered (text size setting applied): centre again then, once
+            ContentRendered += (s, e) => { if (_placed) return; _placed = true; WindowSnap.CenterOnScreen(this, _monitorOf); WindowSnap.Clamp(this); };
             Closed += (s, e) => { try { _cts?.Cancel(); } catch { } };
         }
 

@@ -20,6 +20,10 @@ namespace Wingmate.Core
         /// reset, Wed Dec 16 07:00 UTC (Tue 11 PM PST, Wed 8 AM CET).</summary>
         public static readonly DateTime SpiritstoneShopEnds = new(2026, 12, 16, 7, 0, 0, DateTimeKind.Utc);
 
+        /// <summary>Corroded Decontamination Facility (Nov 25 patch): weekly event dungeon, 7 kills a week per character, Nov 25 to the
+        /// Dec 16 2026 maintenance; it hides at that week's reset, Wed Dec 16 07:00 UTC.</summary>
+        public static readonly DateTime CorrodedFacilityEnds = new(2026, 12, 16, 7, 0, 0, DateTimeKind.Utc);
+
         public static readonly IReadOnlyList<EventDefinition> Definitions = new[]
         {
             new EventDefinition("shugo-festival", "Shugo Festival", "daily"),
@@ -27,6 +31,7 @@ namespace Wingmate.Core
             new EventDefinition("artifact-siege", "Artifact Siege", "weekly"),
             new EventDefinition("arena-of-tactics", "Arena of Tactics (3 matches)", "weekly"),
             new EventDefinition("spiritstone-shop-2026", "Spiritstone shop (event)", "weekly", SpiritstoneShopEnds),
+            new EventDefinition("corroded-decontamination-2026", "Corroded Decontamination Facility (7 kills, event)", "weekly", CorrodedFacilityEnds),
         };
 
         /// <summary>1.0.7: default items that move out of Dailies/Weeklies (exact default name, from-list kind, event id).</summary>

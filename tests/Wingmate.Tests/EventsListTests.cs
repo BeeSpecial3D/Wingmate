@@ -15,7 +15,7 @@ public class EventsListTests : IDisposable
     public void Dispose() { ChecklistClock.UtcNow = () => DateTime.UtcNow; try { Directory.Delete(_dir, true); } catch { } }
     string P => Path.Combine(_dir, "checklist.json");
 
-    static readonly string[] EventNames = { "Shugo Festival", "Dimensional Invasion", "Artifact Siege", "Arena of Tactics (3 matches)", "Spiritstone shop (event)" };
+    static readonly string[] EventNames = { "Shugo Festival", "Dimensional Invasion", "Artifact Siege", "Arena of Tactics (3 matches)", "Spiritstone shop (event)", "Corroded Decontamination Facility (7 kills, event)" };
 
     // ------------------------------------------------------------ new installs
     [Fact] public void NewCharacter_HasDailiesWeekliesEvents_EventItemsOffDailyWeekly()
@@ -162,6 +162,20 @@ public class EventsListTests : IDisposable
         Assert.DoesNotContain(spirit, ev.LiveItems);
         Assert.Contains(spirit, ev.Items); Assert.True(spirit.Done); // not deleted
         Assert.DoesNotContain(spirit, CheckedItems.Visible(ev, showChecked: true));
+    }
+
+    [Fact] public void CorrodedFacility_IsWeekly_HidesAtTheDec16Reset_StateKept()
+    {
+        var c = ChecklistBook.NewCharacter("Daeva");
+        var ev = Events(c);
+        var item = ev.Items.Single(i => i.Id == "corroded-decontamination-2026");
+        Assert.Equal("weekly", item.Reset);
+        item.Done = true;
+        ChecklistClock.UtcNow = () => new DateTime(2026, 12, 16, 6, 59, 0, DateTimeKind.Utc);
+        Assert.Contains(item, ev.LiveItems);
+        ChecklistClock.UtcNow = () => new DateTime(2026, 12, 16, 7, 0, 0, DateTimeKind.Utc);
+        Assert.DoesNotContain(item, ev.LiveItems);
+        Assert.Contains(item, ev.Items); Assert.True(item.Done);
     }
 
     [Fact] public void ExpiredItems_DoNotBlockCompletion()
